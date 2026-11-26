@@ -5,6 +5,7 @@ import { drawBackdrop } from '../hud/renderer';
 import { drawBoot, BOOT_MS } from '../hud/boot';
 import { BUILD_ID, ensureLatest } from '../version';
 import { getCustom, setCustom, phraseFromTraining } from './wake';
+import { parseCommand, type Command } from './commands';
 
 document.getElementById('ver')!.textContent = BUILD_ID;
 ensureLatest();
@@ -58,25 +59,94 @@ function setMode(m: Mode) {
   }
 }
 
-async function wake(text: string) {
+/** 講話（講話時暫停聆聽，避免聽到自己的聲音） */
+async function say(text: string) {
+  listener?.setMuted(true);
+  await speak(text);
+  listener?.setMuted(false);
+  awakeUntil = performance.now() + AWAKE_MS;
+}
+
+/** 喚醒的畫面部分：開機動畫（還不講話，等這句話說完看看有沒有指令） */
+function wakeVisual(text: string) {
   const now = performance.now();
   if (mode === 'standby') {
     bootStart = now;
     setMode('booting');
   }
   awakeUntil = now + AWAKE_MS;
-  headlineEl.textContent = GREETING;
+  headlineEl.textContent = '我在聽…';
   subEl.textContent = text ? `聽到：「${text}」` : '（模擬喚醒）';
+}
 
-  listener?.setMuted(true); // 自己講話時不要聽
-  await speak(GREETING);
-  listener?.setMuted(false);
-  awakeUntil = performance.now() + AWAKE_MS;
-  if (mode !== 'standby') subEl.textContent = '請說…（說「待命」或按 Esc 回到待命）';
+let greetTimer = 0;
+async function greet() {
+  clearTimeout(greetTimer);
+  headlineEl.textContent = GREETING;
+  await say(GREETING);
+  if (mode !== 'standby') subEl.textContent = '例如：「打開今天的日報」「打開看好清單」　·　說「待命」或按 Esc 回到待命';
+}
+
+// ---- 指令 ----
+const viaAgent = location.port === '4000';
+
+async function api(path: string, body: unknown) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Jarvis': '1' },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+const md = (d: string) => {
+  const [, m, day] = d.split('-').map(Number);
+  return `${m} 月 ${day} 日`;
+};
+
+async function runCommand(cmd: Command) {
+  clearTimeout(greetTimer);
+  speechSynthesis.cancel();
+  if (cmd.kind === 'standby') return goStandby(true);
+
+  if (!viaAgent) {
+    headlineEl.textContent = '這個功能要從本機 agent 開啟';
+    subEl.textContent = '在專案資料夾執行 npm run agent，然後打開 http://localhost:4000';
+    return say('開檔案要先啟動本機程式喔。');
+  }
+
+  try {
+    if (cmd.kind === 'daily') {
+      headlineEl.textContent = `正在打開${cmd.label}的日報…`;
+      const r = await api('/api/daily', { offset: cmd.offset });
+      if (!r.ok) {
+        headlineEl.textContent = '找不到日報';
+        return say(`找不到${cmd.label}以前的日報。`);
+      }
+      headlineEl.textContent = `已開啟：${r.rel}`;
+      subEl.textContent = 'Obsidian 已經打開這份日報';
+      return say(r.fallback ? `${cmd.label}的日報還沒有，幫你打開最新的 ${md(r.date)}。` : `好的，打開 ${md(r.date)} 的日報。`);
+    }
+    if (cmd.kind === 'open') {
+      headlineEl.textContent = `正在搜尋「${cmd.query}」…`;
+      const r = await api('/api/open', { query: cmd.query });
+      if (!r.ok) {
+        headlineEl.textContent = `找不到「${cmd.query}」`;
+        return say(`我找不到${cmd.query}。`);
+      }
+      headlineEl.textContent = `已開啟：${r.rel}`;
+      subEl.textContent = `搜尋「${cmd.query}」`;
+      const name = r.rel.split('/').pop().replace(/\.md$/, '');
+      return say(`好的，打開${name}。`);
+    }
+  } catch (e) {
+    headlineEl.textContent = '本機 agent 沒有回應';
+    subEl.textContent = String(e);
+    return say('本機程式好像沒有在跑。');
+  }
 }
 
 /** 回到待命：立刻停掉講到一半的話 */
-const STANDBY_RE = /待命|沒事|没事|退下|休息|再見|掰掰|standby|dismiss/i;
 function goStandby(reply = false) {
   if (mode === 'standby') return;
   speechSynthesis.cancel();
@@ -190,12 +260,31 @@ clearBtn.addEventListener('click', () => {
 
 $('standbyBtn').addEventListener('click', () => escape());
 
+// 打字下指令（語音不準時的備案）
+const typeCmd = $('typeCmd') as HTMLInputElement;
+typeCmd.addEventListener('keydown', (e) => {
+  e.stopPropagation(); // 打字時空白鍵不要觸發模擬喚醒
+  if (e.key === 'Escape') return typeCmd.blur();
+  if (e.key !== 'Enter' || !typeCmd.value.trim()) return;
+  const text = typeCmd.value.trim();
+  typeCmd.value = '';
+  addHistory(`⌨ ${text}`, false);
+  const cmd = parseCommand(text);
+  if (mode === 'standby') wakeVisual(text);
+  if (cmd) runCommand(cmd);
+  else {
+    headlineEl.textContent = `聽不懂：「${text}」`;
+    subEl.textContent = '例如：「打開今天的日報」「昨天的日報」「打開看好清單」';
+  }
+});
+
 // 空白鍵：模擬喚醒（不用講話也能測動畫和語音）；Esc：回到待命
 window.addEventListener('keydown', (e) => {
   if (!startScreen.classList.contains('hidden')) return;
   if (e.code === 'Space') {
     e.preventDefault();
-    wake('');
+    wakeVisual('');
+    greet();
   } else if (e.code === 'Escape') {
     escape();
   }
@@ -217,12 +306,20 @@ startBtn.addEventListener('click', () => {
       transcriptEl.classList.toggle('final', isFinal);
       if (mode !== 'standby') awakeUntil = performance.now() + AWAKE_MS;
     },
-    onWake: (text) => wake(text),
+    onWake(text) {
+      wakeVisual(text);
+      // 正常會在這句話說完（onFinal）時決定要執行指令還是打招呼；保險起見 3 秒後還沒結果就先打招呼
+      clearTimeout(greetTimer);
+      greetTimer = window.setTimeout(greet, 3000);
+    },
     onFinal(text, woke) {
       if (training) return onTrainFinal(text);
       addHistory(text, woke);
-      // 醒著的時候說「待命 / 沒事了 / 退下」就回到待命
-      if (!woke && mode !== 'standby' && STANDBY_RE.test(text)) goStandby(true);
+      if (mode === 'standby' && !woke) return;
+      // 同一句話裡有指令（例如「嘿海克斯，打開今天的日報」）就直接執行，否則打招呼
+      const cmd = parseCommand(text);
+      if (cmd) runCommand(cmd);
+      else if (woke) greet();
     },
     onState: onMicState,
   });

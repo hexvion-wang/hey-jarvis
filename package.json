@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host"
+    "preview": "vite preview --host",
+    "agent": "vite build && node agent/server.ts"
   },
   "devDependencies": {
     "typescript": "^7.0.2",

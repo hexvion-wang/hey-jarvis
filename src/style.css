@@ -221,3 +221,15 @@ body.awake #headline { color: var(--gold); text-shadow: 0 0 14px var(--gold); }
 #history { list-style: none; font: 13px/1.6 ui-monospace, Consolas, monospace; max-height: 180px; overflow: hidden; }
 #history li { color: #8fb8c4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #history li.woke { color: #7dffb0; }
+#typeCmd {
+  width: 100%;
+  margin-top: 2px;
+  padding: 7px 10px;
+  border: 1px solid var(--cyan-dim);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #d8fbff;
+  font: 13px 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
+  outline: none;
+}
+#typeCmd:focus { border-color: var(--cyan); }
