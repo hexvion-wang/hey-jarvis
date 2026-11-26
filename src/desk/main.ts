@@ -52,7 +52,7 @@ function setMode(m: Mode) {
   mode = m;
   stateEl.textContent = m.toUpperCase();
   document.body.classList.toggle('awake', m !== 'standby');
-  if (m === 'standby') {
+  if (m === 'standby' && !training) {
     headlineEl.textContent = '待命中';
     subEl.textContent = '說「嘿，海克斯」或「Hey Hex」叫醒我　·　空白鍵模擬喚醒　·　Esc 回到待命';
   }
@@ -139,6 +139,7 @@ renderLearned();
 
 function startTraining() {
   if (!listener) return;
+  goStandby();
   training = [];
   listener.training = true;
   trainBtn.disabled = true;
@@ -156,13 +157,29 @@ function onTrainFinal(text: string) {
     subEl.textContent = `剛剛聽到：「${text}」`;
     return;
   }
-  setCustom([...getCustom(), ...training]);
+  finishTraining('訓練完成！現在叫我試試看');
+}
+
+/** 結束訓練（完成或取消）；已經錄到的幾次都會保留 */
+function finishTraining(message: string) {
+  if (!training) return;
+  if (training.length) setCustom([...getCustom(), ...training]);
   renderLearned();
   training = null;
-  listener.training = false;
+  if (listener) listener.training = false;
   trainBtn.disabled = false;
   setMode('standby');
-  subEl.textContent = '訓練完成！現在叫我試試看';
+  subEl.textContent = message;
+}
+
+/** Esc / 回到待命按鈕：訓練中就取消訓練，醒著就回到待命 */
+function escape() {
+  if (training) {
+    const n = training.length;
+    finishTraining(n ? `已取消訓練，保留了剛剛的 ${n} 次` : '已取消訓練');
+  } else {
+    goStandby();
+  }
 }
 
 trainBtn.addEventListener('click', startTraining);
@@ -171,7 +188,7 @@ clearBtn.addEventListener('click', () => {
   renderLearned();
 });
 
-$('standbyBtn').addEventListener('click', () => goStandby());
+$('standbyBtn').addEventListener('click', () => escape());
 
 // 空白鍵：模擬喚醒（不用講話也能測動畫和語音）；Esc：回到待命
 window.addEventListener('keydown', (e) => {
@@ -180,7 +197,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     wake('');
   } else if (e.code === 'Escape') {
-    goStandby();
+    escape();
   }
 });
 

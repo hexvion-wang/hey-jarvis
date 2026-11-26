@@ -15,6 +15,7 @@ interface Rec {
   onstart: (() => void) | null;
   start(): void;
   stop(): void;
+  abort(): void;
 }
 
 export type MicState = 'off' | 'listening' | 'error';
@@ -46,6 +47,9 @@ export class VoiceListener {
   training = false;
   /** 這句話是否已經叫醒過（避免同一句的中途結果和最終結果各觸發一次） */
   private utteranceWoke = false;
+  /** 看門狗用：辨識是否正在跑、最後一次有動靜的時間 */
+  private active = false;
+  private lastActivity = performance.now();
 
   constructor(private ev: VoiceEvents, lang = 'zh-TW') {
     const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -56,11 +60,14 @@ export class VoiceListener {
     this.rec.maxAlternatives = 5;
 
     this.rec.onstart = () => {
+      this.active = true;
+      this.lastActivity = performance.now();
       this.restartDelay = 300;
       this.ev.onState('listening');
     };
 
     this.rec.onresult = (e) => {
+      this.lastActivity = performance.now();
       if (this.muted) return;
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
@@ -100,13 +107,31 @@ export class VoiceListener {
     };
 
     this.rec.onend = () => {
+      this.active = false;
+      this.lastActivity = performance.now();
       this.utteranceWoke = false;
       if (!this.running) {
         this.ev.onState('off');
         return;
       }
+      this.ev.onState('off');
       setTimeout(() => this.running && this.safeStart(), this.restartDelay);
     };
+
+    // 看門狗：Chrome 偶爾會悄悄停止辨識卻不通知，這裡定期檢查
+    setInterval(() => {
+      if (!this.running) return;
+      const idle = performance.now() - this.lastActivity;
+      if (!this.active && idle > 2500) {
+        // 該重啟卻沒重啟
+        this.lastActivity = performance.now();
+        this.safeStart();
+      } else if (this.active && idle > 25000) {
+        // 跑著但 25 秒完全沒結果，可能卡住了，強制重來
+        this.lastActivity = performance.now();
+        this.rec.abort();
+      }
+    }, 1000);
   }
 
   private safeStart() {
