@@ -114,3 +114,14 @@ body.online #cam { opacity: 1; }
   color: var(--red);
   text-shadow: 0 0 6px var(--red);
 }
+
+/* HUD 畫布 */
+#hud {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 3;
+}
+#fps.low { color: var(--red); text-shadow: 0 0 6px var(--red); }
