@@ -6,6 +6,10 @@ import { drawHand } from '../hud/skeleton';
 import { drawCursor, addClickMark } from '../hud/cursor';
 import { GestureTracker } from './gestures';
 import type { HandLandmarkerResult } from '@mediapipe/tasks-vision';
+import { BUILD_ID, ensureLatest } from '../version';
+
+document.getElementById('ver')!.textContent = BUILD_ID;
+ensureLatest();
 
 const video = document.getElementById('cam') as HTMLVideoElement;
 const canvas = document.getElementById('hud') as HTMLCanvasElement;
