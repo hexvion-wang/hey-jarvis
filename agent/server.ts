@@ -93,7 +93,7 @@ async function handleStatic(res: ServerResponse, path: string) {
   res.end(await readFile(file));
 }
 
-createServer(async (req, res) => {
+const server = createServer(async (req, res) => {
   const path = new URL(req.url ?? '/', 'http://localhost').pathname;
   try {
     if (path.startsWith('/api/')) await handleApi(req, res, path);
@@ -102,7 +102,19 @@ createServer(async (req, res) => {
     console.error(e);
     send(res, 500, { ok: false, error: String(e) });
   }
-}).listen(PORT, '127.0.0.1', () => {
+});
+
+server.on('error', (e: NodeJS.ErrnoException) => {
+  if (e.code === 'EADDRINUSE') {
+    console.error(`\n  port ${PORT} 已經被佔用：agent 可能已經在另一個視窗執行中了。`);
+    console.error(`  直接用 Chrome 打開 http://localhost:${PORT} 就可以，或先關掉另一個視窗再重開。\n`);
+  } else {
+    console.error(e);
+  }
+  process.exit(1);
+});
+
+server.listen(PORT, '127.0.0.1', () => {
   console.log('\n  J.A.R.V.I.S. agent 已啟動');
   console.log(`  用 Chrome 打開：http://localhost:${PORT}`);
   console.log(`  Obsidian vault：${cfg.vault}\n`);
