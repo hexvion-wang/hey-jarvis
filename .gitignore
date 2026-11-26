@@ -1,0 +1,4 @@
+node_modules
+dist
+jarvis.config.json
+*.log
