@@ -109,5 +109,6 @@ export async function searchNote(cfg: VaultConfig, query: string): Promise<Found
 export function openInObsidian(cfg: VaultConfig, file: FoundFile) {
   if (!inside(cfg.vault, file.path)) throw new Error('路徑不在 vault 裡');
   const uri = `obsidian://open?path=${encodeURIComponent(file.path)}`;
-  spawn('explorer.exe', [uri], { detached: true, stdio: 'ignore' }).unref();
+  // 用 Windows 的網址處理程式開 obsidian://，會直接交給 Obsidian（不經過檔案總管）
+  spawn('rundll32.exe', ['url.dll,FileProtocolHandler', uri], { detached: true, stdio: 'ignore' }).unref();
 }

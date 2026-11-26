@@ -11,6 +11,8 @@ import { addRipple, drawEffects, startScan } from '../hud/effects';
 import { makeButton, layoutButtons, hitTest, drawButtons, type HudButton } from '../hud/buttons';
 import { theme } from '../hud/theme';
 import { BUILD_ID, ensureLatest } from '../version';
+import { drawBoot, BOOT_MS } from '../hud/boot';
+import { PhoneLink } from '../shared/link';
 
 document.getElementById('ver')!.textContent = BUILD_ID;
 ensureLatest();
@@ -88,7 +90,19 @@ function press(x: number, y: number, t: number, fromGesture = false) {
   attempts++;
   let b = hitTest(buttons, x, y);
   if (!b && fromGesture && lastHover && t - lastHover.t <= HOVER_GRACE_MS) b = lastHover.b;
-  if (b) {
+
+  // 中間的核心圓環：叫醒電腦上的 Jarvis
+  const coreR = Math.min(vp.screenW, vp.screenH) * 0.17;
+  if (!b && Math.hypot(x - vp.screenW / 2, y - vp.screenH / 2) <= coreR) {
+    hits++;
+    addRipple(vp.screenW / 2, vp.screenH / 2, t, true);
+    if (link.connected) {
+      link.send({ type: 'core' });
+      showBanner('已呼叫電腦上的 Jarvis');
+    } else {
+      showBanner('還沒連上電腦：在電腦輸入配對碼 ' + link.code);
+    }
+  } else if (b) {
     hits++;
     b.pressT = t;
     b.onPress(t);
@@ -148,13 +162,52 @@ function loop() {
   if (hovered && !g.pinching) lastHover = { b: hovered, t: now };
   if (showSkeleton && result) for (const hand of result.landmarks) drawHand(ctx, vp, hand);
   drawEffects(ctx, vp.screenW, vp.screenH, now);
+  // 電腦被叫醒時，手機也播一次開機動畫
+  if (bootStart >= 0 && now - bootStart < BOOT_MS + 800) drawBoot(ctx, vp.screenW, vp.screenH, now, bootStart);
   drawCursor(ctx, g, now);
 }
+
+// ---- 跟電腦連線 ----
+let bootStart = -1;
+const linkEl = $('link');
+const bannerEl = $('banner');
+let bannerTimer = 0;
+
+function showBanner(text: string, ms = 4000) {
+  bannerEl.textContent = text;
+  bannerEl.classList.add('show');
+  clearTimeout(bannerTimer);
+  bannerTimer = window.setTimeout(() => bannerEl.classList.remove('show'), ms);
+}
+
+const link = new PhoneLink({
+  onState(state, detail) {
+    linkEl.classList.toggle('on', state === 'connected');
+    linkEl.textContent =
+      state === 'connected'
+        ? `LINK ✓ 已連上電腦`
+        : state === 'error'
+          ? `LINK ✗ ${detail ?? ''}`
+          : `配對碼 ${link.code} · 在電腦輸入`;
+    if (state === 'connected') showBanner('已連上電腦');
+  },
+  onMessage(msg) {
+    if (msg.type === 'wake') {
+      bootStart = performance.now();
+      showBanner(msg.text ? `電腦聽到：「${msg.text}」` : 'J.A.R.V.I.S. ONLINE');
+    } else if (msg.type === 'standby') {
+      showBanner('STANDBY · 回到待命', 2500);
+    } else if (msg.type === 'status') {
+      showBanner(msg.sub ? `${msg.headline}\n${msg.sub}` : msg.headline, 6000);
+    }
+  },
+});
 
 function goOnline() {
   startScreen.classList.add('hidden');
   document.body.classList.add('online');
   updateScore();
+  link.start();
   requestAnimationFrame(loop);
 }
 

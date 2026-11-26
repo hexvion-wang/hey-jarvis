@@ -233,3 +233,59 @@ body.awake #headline { color: var(--gold); text-shadow: 0 0 14px var(--gold); }
   outline: none;
 }
 #typeCmd:focus { border-color: var(--cyan); }
+
+/* 手機：連線狀態與訊息橫幅 */
+#link {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 40px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 14px;
+  border: 1px solid var(--cyan-dim);
+  border-radius: 999px;
+  background: rgba(0, 8, 16, 0.55);
+  font: 13px/1.2 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  z-index: 5;
+}
+#link.on { color: #7dffb0; border-color: rgba(125, 255, 176, 0.5); text-shadow: 0 0 6px #7dffb0; }
+#banner {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 80px);
+  left: 50%;
+  transform: translate(-50%, -10px);
+  max-width: 90vw;
+  padding: 10px 18px;
+  border: 1px solid var(--gold);
+  border-radius: 10px;
+  background: rgba(20, 14, 0, 0.75);
+  color: var(--gold);
+  text-align: center;
+  white-space: pre-line;
+  font-size: 15px;
+  text-shadow: 0 0 8px rgba(255, 201, 64, 0.6);
+  opacity: 0;
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
+  z-index: 7;
+}
+#banner.show { opacity: 1; transform: translate(-50%, 0); }
+#panel .link-row { margin: 10px 0 0; }
+#linkCode {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--cyan-dim);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #d8fbff;
+  font: 14px ui-monospace, Consolas, monospace;
+  letter-spacing: 0.3em;
+  outline: none;
+}
+#linkCode:focus { border-color: var(--cyan); }
+#linkBtn { flex: 0 0 auto !important; }
+#linkState.connected { color: #7dffb0; }
+#linkState.error { color: var(--red); }
+#linkState.connecting { color: var(--gold); }

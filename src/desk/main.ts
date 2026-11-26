@@ -6,6 +6,7 @@ import { drawBoot, BOOT_MS } from '../hud/boot';
 import { BUILD_ID, ensureLatest } from '../version';
 import { getCustom, setCustom, phraseFromTraining } from './wake';
 import { parseCommand, type Command } from './commands';
+import { DeskLink } from '../shared/link';
 
 document.getElementById('ver')!.textContent = BUILD_ID;
 ensureLatest();
@@ -41,6 +42,30 @@ resize();
 
 setInterval(() => ($('clock').textContent = new Date().toLocaleTimeString('zh-TW', { hour12: false })), 1000);
 
+// ---- 跟 iPhone 連線 ----
+const linkCodeEl = $('linkCode') as HTMLInputElement;
+const linkStateEl = $('linkState');
+const link = new DeskLink({
+  onState(state, detail) {
+    linkStateEl.className = state;
+    linkStateEl.textContent =
+      state === 'connected' ? '✓ 已連上 iPhone' : state === 'connecting' ? detail ?? '連線中…' : state === 'error' ? `✗ ${detail}` : '未連線';
+  },
+  onMessage(msg) {
+    // 手機上捏了中間的核心 → 叫醒
+    if (msg.type === 'core' && !training) {
+      wakeVisual('（iPhone 呼叫）');
+      greet();
+    }
+  },
+});
+linkCodeEl.value = DeskLink.savedCode();
+$('linkBtn').addEventListener('click', () => link.connect(linkCodeEl.value));
+linkCodeEl.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter') link.connect(linkCodeEl.value);
+});
+
 // ---- 狀態 ----
 type Mode = 'standby' | 'booting' | 'awake';
 let mode: Mode = 'standby';
@@ -50,6 +75,7 @@ let power = 0.2;
 let listener: VoiceListener | null = null;
 
 function setMode(m: Mode) {
+  if (m === 'standby' && mode !== 'standby') link.send({ type: 'standby' });
   mode = m;
   stateEl.textContent = m.toUpperCase();
   document.body.classList.toggle('awake', m !== 'standby');
@@ -61,6 +87,8 @@ function setMode(m: Mode) {
 
 /** 講話（講話時暫停聆聽，避免聽到自己的聲音） */
 async function say(text: string) {
+  // 同步畫面上的訊息到手機
+  link.send({ type: 'status', headline: headlineEl.textContent ?? '', sub: subEl.textContent ?? '' });
   listener?.setMuted(true);
   await speak(text);
   listener?.setMuted(false);
@@ -73,6 +101,7 @@ function wakeVisual(text: string) {
   if (mode === 'standby') {
     bootStart = now;
     setMode('booting');
+    link.send({ type: 'wake', text });
   }
   awakeUntil = now + AWAKE_MS;
   headlineEl.textContent = '我在聽…';
@@ -324,6 +353,8 @@ startBtn.addEventListener('click', () => {
     onState: onMicState,
   });
   listener.start();
+  // 之前配對過就自動連線
+  if (linkCodeEl.value) link.connect(linkCodeEl.value);
   startScreen.classList.add('hidden');
   setMode('standby');
 });

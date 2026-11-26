@@ -31,6 +31,11 @@
       <div class="row">
         <button id="standbyBtn">回到待命（Esc）</button>
       </div>
+      <div class="row link-row">
+        <input id="linkCode" inputmode="numeric" maxlength="4" placeholder="iPhone 配對碼" />
+        <button id="linkBtn">連線</button>
+      </div>
+      <p class="label">iPhone：<span id="linkState">未連線</span></p>
       <input id="typeCmd" placeholder="打字下指令，例如：打開今天的日報（Enter 送出）" />
       <p class="label">已學會：<span id="learned"></span></p>
       <p class="label">最近聽到（✓ = 有叫醒）</p>
