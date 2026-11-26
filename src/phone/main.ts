@@ -2,29 +2,53 @@ import '../style.css';
 import { startCamera, CameraError } from './camera';
 import { createTracker, type Tracker } from './tracker';
 import type { Viewport } from './coords';
-import { drawHand } from '../hud/skeleton';
-import { drawCursor, addClickMark } from '../hud/cursor';
 import { GestureTracker } from './gestures';
 import type { HandLandmarkerResult } from '@mediapipe/tasks-vision';
+import { drawHand } from '../hud/skeleton';
+import { drawCursor } from '../hud/cursor';
+import { drawBackdrop } from '../hud/renderer';
+import { addRipple, drawEffects, startScan } from '../hud/effects';
+import { makeButton, layoutButtons, hitTest, drawButtons, type HudButton } from '../hud/buttons';
+import { theme } from '../hud/theme';
 import { BUILD_ID, ensureLatest } from '../version';
 
 document.getElementById('ver')!.textContent = BUILD_ID;
 ensureLatest();
 
-const video = document.getElementById('cam') as HTMLVideoElement;
-const canvas = document.getElementById('hud') as HTMLCanvasElement;
+const $ = (id: string) => document.getElementById(id)!;
+const video = $('cam') as HTMLVideoElement;
+const canvas = $('hud') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
-const startScreen = document.getElementById('start')!;
-const startBtn = document.getElementById('startBtn') as HTMLButtonElement;
-const errorEl = document.getElementById('error')!;
-const clockEl = document.getElementById('clock')!;
-const fpsEl = document.getElementById('fps')!;
-const handsEl = document.getElementById('hands')!;
-const stateEl = document.getElementById('state')!;
-const gestureEl = document.getElementById('gesture')!;
-const clicksEl = document.getElementById('clicks')!;
+const startScreen = $('start');
+const startBtn = $('startBtn') as HTMLButtonElement;
+const errorEl = $('error');
+const clockEl = $('clock');
+const fpsEl = $('fps');
+const handsEl = $('hands');
+const stateEl = $('state');
+const gestureEl = $('gesture');
+const clicksEl = $('clicks');
 
 const vp: Viewport = { screenW: 1, screenH: 1, videoW: 640, videoH: 480 };
+
+// ---- HUD 按鈕 ----
+let showSkeleton = true;
+const buttons: HudButton[] = [
+  makeButton('scan', 'SCAN', '掃描', -0.24, -0.2, (t) => startScan(t)),
+  makeButton('skel', 'SKEL', '骨架', 0.24, -0.2, () => {
+    showSkeleton = !showSkeleton;
+    buttons[1].active = !showSkeleton;
+  }),
+  makeButton('alert', 'ALERT', '警戒', -0.24, 0.2, () => {
+    theme.alert = !theme.alert;
+    buttons[2].active = theme.alert;
+    document.body.classList.toggle('alert', theme.alert);
+  }),
+  makeButton('reset', 'RESET', '重設計數', 0.24, 0.2, () => {
+    hits = 0;
+    attempts = -1; // 這次點擊本身不算
+  }),
+];
 
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -33,6 +57,7 @@ function resize() {
   canvas.width = Math.round(vp.screenW * dpr);
   canvas.height = Math.round(vp.screenH * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  layoutButtons(buttons, vp.screenW, vp.screenH);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -43,32 +68,49 @@ function tickClock() {
 setInterval(tickClock, 1000);
 tickClock();
 
+// ---- 點擊與命中率 ----
+let hits = 0;
+let attempts = 0;
+
+function updateScore() {
+  clicksEl.textContent = `HIT ${hits}/${attempts}`;
+}
+
+function press(x: number, y: number, t: number) {
+  attempts++;
+  const b = hitTest(buttons, x, y);
+  if (b) {
+    hits++;
+    b.pressT = t;
+    b.onPress(t);
+  }
+  addRipple(x, y, t, !!b);
+  updateScore();
+}
+
 // ---- 主迴圈 ----
-let tracker: Tracker;
+let tracker: Tracker | null = null;
 let lastVideoTime = -1;
 let frames = 0;
 let fpsWindowStart = performance.now();
+let lastDraw = performance.now();
 let result: HandLandmarkerResult | null = null;
-let clicks = 0;
 const gestures = new GestureTracker();
 
 function loop() {
   requestAnimationFrame(loop);
   const now = performance.now();
+  const dt = now - lastDraw;
+  lastDraw = now;
 
   // 鏡頭有新畫面才重新偵測；繪圖則每一幀都做（讓動畫順暢）
-  if (video.currentTime !== lastVideoTime) {
+  if (tracker && video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
     result = tracker.detect(video, now);
     handsEl.textContent = `HANDS ${result.landmarks.length}`;
 
-    // 用第一隻偵測到的手當游標手
     const g = gestures.update(vp, result.landmarks[0], now);
-    if (g.pinchStart && g.clickPos) {
-      clicks++;
-      clicksEl.textContent = `CLICK ${clicks}`;
-      addClickMark(g.clickPos.x, g.clickPos.y, now);
-    }
+    if (g.pinchStart && g.clickPos) press(g.clickPos.x, g.clickPos.y, now);
     gestureEl.textContent = g.hasHand ? `${g.pinching ? 'PINCH' : 'POINT'} ${g.ratio.toFixed(2)}` : 'NO HAND';
     gestureEl.classList.toggle('pinch', g.pinching);
 
@@ -82,36 +124,62 @@ function loop() {
     }
   }
 
+  const g = gestures.state;
   ctx.clearRect(0, 0, vp.screenW, vp.screenH);
-  if (result) for (const hand of result.landmarks) drawHand(ctx, vp, hand);
-  drawCursor(ctx, gestures.state, now);
+  drawBackdrop(ctx, vp.screenW, vp.screenH, now);
+  drawButtons(ctx, buttons, g.hasHand ? g.cursor : null, dt, now);
+  if (showSkeleton && result) for (const hand of result.landmarks) drawHand(ctx, vp, hand);
+  drawEffects(ctx, vp.screenW, vp.screenH, now);
+  drawCursor(ctx, g, now);
 }
 
-// 點一下下方手勢列可以把點擊計數歸零，方便做 10 次測試
-document.getElementById('gestureBar')!.addEventListener('click', () => {
-  clicks = 0;
-  clicksEl.textContent = 'CLICK 0';
+function goOnline() {
+  startScreen.classList.add('hidden');
+  document.body.classList.add('online');
+  updateScore();
+  requestAnimationFrame(loop);
+}
+
+// 直接用手指點按鈕也有效（方便比較、或在電腦上測試）
+window.addEventListener('pointerdown', (e) => {
+  if (!document.body.classList.contains('online')) return;
+  if ((e.target as HTMLElement).closest('#gestureBar, #status')) return;
+  press(e.clientX, e.clientY, performance.now());
+});
+
+// 點一下下方手勢列把命中率歸零
+$('gestureBar').addEventListener('click', () => {
+  hits = 0;
+  attempts = 0;
+  updateScore();
 });
 
 startBtn.addEventListener('click', async () => {
   startBtn.disabled = true;
   errorEl.textContent = '';
   stateEl.textContent = 'BOOTING';
+
+  // ?demo：不開鏡頭，只看 HUD（電腦上預覽用）
+  if (new URLSearchParams(location.search).has('demo')) {
+    stateEl.textContent = 'DEMO';
+    goOnline();
+    return;
+  }
+
   try {
     // 模型下載與開鏡頭同時進行
     const trackerP = createTracker();
     const { width, height } = await startCamera(video);
     vp.videoW = width;
     vp.videoH = height;
-    startScreen.classList.add('hidden');
-    document.body.classList.add('online');
+    goOnline();
 
     stateEl.textContent = 'LOADING';
     tracker = await trackerP;
     stateEl.textContent = `ONLINE·${tracker.delegate}`;
-    requestAnimationFrame(loop);
   } catch (e) {
     startScreen.classList.remove('hidden');
+    document.body.classList.remove('online');
     errorEl.textContent = e instanceof CameraError ? e.message : `手部模型載入失敗：${String(e)}`;
     stateEl.textContent = 'ERROR';
     startBtn.disabled = false;

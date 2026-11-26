@@ -1,4 +1,5 @@
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
+import { theme } from './theme';
 import { HAND_CONNECTIONS } from '../phone/tracker';
 import { toScreen, type Viewport } from '../phone/coords';
 
@@ -18,10 +19,10 @@ export function drawHand(ctx: CanvasRenderingContext2D, vp: Viewport, hand: Norm
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.shadowColor = '#00e5ff';
+  ctx.shadowColor = theme.main;
   ctx.shadowBlur = 14;
 
-  ctx.strokeStyle = 'rgba(0, 229, 255, 0.75)';
+  ctx.strokeStyle = `rgba(${theme.mainRgb}, 0.75)`;
   ctx.lineWidth = line;
   ctx.beginPath();
   for (const { start, end } of HAND_CONNECTIONS) {
@@ -32,7 +33,7 @@ export function drawHand(ctx: CanvasRenderingContext2D, vp: Viewport, hand: Norm
 
   pts.forEach((p, i) => {
     const isTip = FINGER_TIPS.has(i);
-    const color = isTip ? '#ffc940' : '#00e5ff';
+    const color = isTip ? '#ffc940' : theme.main;
     ctx.beginPath();
     ctx.arc(p.x, p.y, isTip ? tip : joint, 0, Math.PI * 2);
     ctx.fillStyle = color;
