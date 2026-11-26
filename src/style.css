@@ -125,3 +125,23 @@ body.online #cam { opacity: 1; }
   z-index: 3;
 }
 #fps.low { color: var(--red); text-shadow: 0 0 6px var(--red); }
+
+/* 下方手勢列 */
+#gestureBar {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 18px;
+  padding: 8px 18px;
+  border: 1px solid var(--cyan-dim);
+  border-radius: 999px;
+  background: rgba(0, 8, 16, 0.55);
+  font: 14px/1 ui-monospace, 'SF Mono', Menlo, monospace;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 6px var(--cyan);
+  z-index: 5;
+}
+#gesture.pinch { color: var(--gold); text-shadow: 0 0 8px var(--gold); }
+#clicks { color: var(--gold); }
