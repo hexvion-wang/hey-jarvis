@@ -1,6 +1,16 @@
-﻿# 在桌面建立（或重建）HEX 捷徑：powershell -ExecutionPolicy Bypass -File scripts\make-shortcut.ps1
+﻿# 建立 HEX 捷徑：
+#   powershell -ExecutionPolicy Bypass -File scripts\make-shortcut.ps1            → 桌面
+#   powershell -ExecutionPolicy Bypass -File scripts\make-shortcut.ps1 -Startup   → 開機自動啟動
+#   powershell -ExecutionPolicy Bypass -File scripts\make-shortcut.ps1 -Startup -Remove → 取消開機啟動
+param([switch]$Startup, [switch]$Remove)
 $Root = Split-Path -Parent $PSScriptRoot
-$lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'HEX.lnk'
+$dir = if ($Startup) { [Environment]::GetFolderPath('Startup') } else { [Environment]::GetFolderPath('Desktop') }
+$lnk = Join-Path $dir 'HEX.lnk'
+if ($Remove) {
+  if (Test-Path $lnk) { Remove-Item $lnk }
+  Write-Host "已移除 $lnk"
+  exit
+}
 $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
 $s.TargetPath = "$env:WINDIR\System32\wscript.exe"
 $s.Arguments = "`"$Root\scripts\app\HEX.vbs`""

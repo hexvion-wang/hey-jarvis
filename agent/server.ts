@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, resolve, relative } from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { findDaily, searchNote, openInObsidian, summarizeDaily, readDaily, type VaultConfig } from './obsidian.ts';
 import { getSysInfo } from './sysinfo.ts';
 import { quickOpen, appPrompt, extractOpen, appName } from './appIntent.ts';
@@ -12,6 +12,7 @@ const PORT = Number(process.env.JARVIS_PORT) || 4000;
 const ROOT = resolve(import.meta.dirname, '..');
 const DIST = join(ROOT, 'dist');
 const CONFIG_PATH = join(ROOT, 'jarvis.config.json');
+const STARTUP_LNK = join(process.env.APPDATA ?? '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'HEX.lnk');
 
 if (!existsSync(CONFIG_PATH)) {
   console.error('找不到 jarvis.config.json，請複製 jarvis.config.example.json 並填入 Obsidian vault 路徑');
@@ -73,6 +74,18 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
   if (path === '/api/daily-summary' && req.method === 'GET') {
     const s = await summarizeDaily(cfg);
     return send(res, 200, s ? { ok: true, ...s } : { ok: false, error: 'not-found' });
+  }
+
+  // 開機自動啟動：Windows「啟動」資料夾裡有沒有 HEX 捷徑
+  if (path === '/api/autostart' && req.method === 'GET') return send(res, 200, { ok: true, on: existsSync(STARTUP_LNK) });
+  if (path === '/api/autostart' && req.method === 'POST') {
+    const on = (await readJson(req)).on === true;
+    const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(ROOT, 'scripts', 'make-shortcut.ps1'), '-Startup'];
+    if (!on) args.push('-Remove');
+    spawnSync('powershell.exe', args, { windowsHide: true, timeout: 15000 });
+    const now = existsSync(STARTUP_LNK);
+    console.log(`開機啟動：${now ? '開' : '關'}`);
+    return send(res, 200, { ok: now === on, on: now });
   }
 
   if (path === '/api/chat-status' && req.method === 'GET') {

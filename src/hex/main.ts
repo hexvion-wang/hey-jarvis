@@ -318,6 +318,23 @@ async function toggleMic() {
   }
 }
 micBtn.addEventListener('click', toggleMic);
+
+// ---- 開機自動啟動（Windows「啟動」資料夾的捷徑，由本機 agent 建立／移除） ----
+const bootBtn = $('bootBtn');
+async function refreshBoot() {
+  if (!agentOk) return void setTimeout(refreshBoot, 2000);
+  const r = await api('/api/autostart').catch(() => null);
+  bootBtn.classList.toggle('on', !!r?.on);
+}
+bootBtn.addEventListener('click', async () => {
+  if (!agentOk) return toast('需要本機 agent 才能設定開機啟動', 4000);
+  const on = !bootBtn.classList.contains('on');
+  const r = await api('/api/autostart', { on }).catch(() => null);
+  if (!r?.ok) return toast('設定失敗', 4000);
+  bootBtn.classList.toggle('on', r.on);
+  toast(r.on ? '已開啟：之後 Windows 開機會自動打開 HEX' : '已關閉開機啟動');
+});
+setTimeout(refreshBoot, 1500);
 // 之前開過就自動開（瀏覽器記得麥克風權限時不會再問）
 if (localStorage.getItem('hex-mic')) toggleMic();
 setInterval(() => (micLevel.style.width = `${Math.round(clap.level * 100)}%`), 50);
