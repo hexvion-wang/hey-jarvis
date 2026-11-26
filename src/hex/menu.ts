@@ -146,7 +146,13 @@ export class HexMenu {
     return 1 - clamp01(e / CLOSE_MS);
   }
 
-  draw(ctx: CanvasRenderingContext2D, t: number, cursor: { x: number; y: number } | null, dt: number): AppDef | null {
+  draw(
+    ctx: CanvasRenderingContext2D,
+    t: number,
+    cursor: { x: number; y: number } | null,
+    dt: number,
+    opts: { core?: boolean } = {},
+  ): AppDef | null {
     const e = t - this.t0;
     if (this.state === 'opening' && e > OPEN_MS) this.state = 'open';
     if (this.state === 'closing' && e > CLOSE_MS) this.state = 'standby';
@@ -155,7 +161,7 @@ export class HexMenu {
     this.drawGrid(ctx, 0.25 + open * 0.75);
     this.drawRings(ctx, t, open);
     if (this.state === 'opening') this.drawShockwave(ctx, e);
-    this.drawCore(ctx, t, open);
+    if (opts.core !== false) this.drawCore(ctx, t, open);
 
     const hovered = cursor ? this.hitNode(cursor.x, cursor.y, t) : null;
     for (const n of this.nodes) this.drawNode(ctx, n, t, dt, n.app === hovered);

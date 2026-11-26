@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, resolve, relative } from 'node:path';
 import { spawn } from 'node:child_process';
-import { findDaily, searchNote, openInObsidian, type VaultConfig } from './obsidian.ts';
+import { findDaily, searchNote, openInObsidian, summarizeDaily, type VaultConfig } from './obsidian.ts';
+import { getSysInfo } from './sysinfo.ts';
 
 const PORT = Number(process.env.JARVIS_PORT) || 4000;
 const ROOT = resolve(import.meta.dirname, '..');
@@ -63,6 +64,11 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
 
   // 設定檔裡有哪些程式可以開（只回傳 id，不回傳路徑）
   if (path === '/api/apps' && req.method === 'GET') return send(res, 200, { ok: true, ids: Object.keys(apps) });
+  if (path === '/api/sys' && req.method === 'GET') return send(res, 200, { ok: true, ...(await getSysInfo()) });
+  if (path === '/api/daily-summary' && req.method === 'GET') {
+    const s = await summarizeDaily(cfg);
+    return send(res, 200, s ? { ok: true, ...s } : { ok: false, error: 'not-found' });
+  }
 
   if (req.method !== 'POST') return send(res, 405, { ok: false, error: 'method not allowed' });
   const body = await readJson(req);

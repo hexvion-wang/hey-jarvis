@@ -1,5 +1,6 @@
 import '../style.css';
 import { HexMenu } from './menu';
+import { HexConsole } from './console';
 import { APPS, type AppDef } from './apps';
 import { BUILD_ID, ensureLatest } from '../version';
 import { DeskLink } from '../shared/link';
@@ -15,9 +16,11 @@ const stateEl = $('state');
 const agentEl = $('agent');
 const toastEl = $('toast');
 
-const IDLE_CLOSE_MS = 20000; // 展開後多久沒動作自動收回
+const IDLE_CLOSE_MS = 30000; // 全息模式多久沒動作回到主控台
+const IDLE_CONSOLE_MS = 90000; // 主控台多久沒動作回到待機
 
 const menu = new HexMenu();
+const hexConsole = new HexConsole();
 let W = 1;
 let H = 1;
 
@@ -29,6 +32,7 @@ function resize() {
   canvas.height = Math.round(H * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   menu.layout(W, H);
+  hexConsole.layout(W, H);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -74,23 +78,71 @@ function toast(text: string, ms = 2500) {
   toastTimer = window.setTimeout(() => toastEl.classList.remove('show'), ms);
 }
 
-// ---- 展開 / 收回 / 開啟程式 ----
+// ---- 三段流程：待機 → 主控台 → 全息 ----
+type Stage = 'standby' | 'console' | 'holo';
+const STAGES: Stage[] = ['standby', 'console', 'holo'];
+let stage: Stage = 'standby';
+/** 等目前的收合動畫跑完，才打開下一段 */
+let pending: Stage | null = null;
 let lastActivity = performance.now();
 
 function setStateLabel() {
-  stateEl.textContent = menu.isOpen ? 'ONLINE' : 'STANDBY';
-  document.body.classList.toggle('awake', menu.isOpen);
+  stateEl.textContent = { standby: 'STANDBY', console: 'CONSOLE', holo: 'HOLO' }[stage];
+  document.body.classList.toggle('awake', stage !== 'standby');
 }
 
-export function openMenu() {
-  lastActivity = performance.now();
-  menu.open(performance.now());
+export function goStage(next: Stage) {
+  if (next === stage) return;
+  const t = performance.now();
+  lastActivity = t;
+  if (stage === 'console') hexConsole.close(t);
+  if (stage === 'holo') menu.close(t);
+  stage = next;
+  pending = next === 'standby' ? null : next;
+  if (next === 'console') refreshDaily();
   setStateLabel();
 }
 
-export function closeMenu() {
-  menu.close(performance.now());
-  setStateLabel();
+/** 往前 / 往後一段 */
+export function stepStage(dir: 1 | -1) {
+  const i = STAGES.indexOf(stage) + dir;
+  if (i >= 0 && i < STAGES.length) goStage(STAGES[i]);
+}
+
+// ---- 主控台資料 ----
+async function refreshSys() {
+  if (!hexConsole.visible && pending !== 'console') return;
+  if (agentOk) {
+    try {
+      const r = await api('/api/sys');
+      if (r.ok) hexConsole.sys = r;
+      hexConsole.demo = false;
+      return;
+    } catch {
+      /* 改用示範數據 */
+    }
+  }
+  // 沒有 agent（例如 GitHub Pages）時用會動的示範數據
+  const s = performance.now() / 1000;
+  hexConsole.demo = true;
+  hexConsole.sys = {
+    cpu: { percent: Math.round(25 + 15 * Math.sin(s / 3)), cores: 20, model: 'DEMO CPU' },
+    mem: { percent: 46, usedGB: 15.7, totalGB: 34.1 },
+    gpu: { name: 'DEMO GPU', util: Math.round(30 + 25 * Math.sin(s / 4)), temp: 48, memUsed: 3600, memTotal: 12282 },
+    uptimeH: 1.5,
+  };
+}
+setInterval(refreshSys, 2000);
+
+async function refreshDaily() {
+  refreshSys();
+  if (!agentOk) return;
+  try {
+    const r = await api('/api/daily-summary');
+    hexConsole.daily = r.ok ? r : null;
+  } catch {
+    hexConsole.daily = null;
+  }
 }
 
 async function launch(app: AppDef) {
@@ -115,7 +167,10 @@ const HOVER_GRACE_MS = 400;
 export function pressAt(x: number, y: number, fromGesture = false) {
   const t = performance.now();
   lastActivity = t;
-  if (menu.hitCore(x, y)) return menu.isOpen ? closeMenu() : openMenu();
+  // 點核心：待機 → 主控台 → 全息；全息時點核心回到主控台
+  if (stage === 'standby' && menu.hitCore(x, y)) return goStage('console');
+  if (stage === 'console' && hexConsole.hitCore(x, y)) return goStage('holo');
+  if (stage === 'holo' && menu.hitCore(x, y)) return goStage('console');
   let app = menu.hitNode(x, y, t);
   if (!app && fromGesture && lastHover && t - lastHover.t <= HOVER_GRACE_MS) app = lastHover.app;
   if (app) launch(app);
@@ -215,10 +270,9 @@ window.addEventListener('pointerdown', (e) => {
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Space') {
     e.preventDefault();
-    if (menu.isOpen) closeMenu();
-    else openMenu();
+    stepStage(1);
   } else if (e.code === 'Escape') {
-    closeMenu();
+    stepStage(-1);
   }
 });
 
@@ -230,7 +284,16 @@ function loop() {
   const dt = t - last;
   last = t;
 
-  if (menu.isOpen && t - lastActivity > IDLE_CLOSE_MS) closeMenu();
+  // 閒置：全息 → 主控台 → 待機
+  if (stage === 'holo' && t - lastActivity > IDLE_CLOSE_MS) goStage('console');
+  if (stage === 'console' && t - lastActivity > IDLE_CONSOLE_MS) goStage('standby');
+
+  // 上一段收合完成後才展開下一段
+  if (pending && hexConsole.state !== 'closing' && menu.state !== 'closing') {
+    if (pending === 'console') hexConsole.open(t);
+    if (pending === 'holo') menu.open(t);
+    pending = null;
+  }
 
   ctx.clearRect(0, 0, W, H);
   // 手離開鏡頭超過 0.6 秒，手勢游標就隱藏
@@ -238,10 +301,11 @@ function loop() {
     cursor = null;
     cursorFromHand = false;
   }
-  const hovered = menu.draw(ctx, t, cursor, dt);
+  const hovered = menu.draw(ctx, t, cursor, dt, { core: !hexConsole.visible });
+  hexConsole.draw(ctx, t, dt, menu.coreR);
   if (hovered && !(cursorFromHand && handPinch)) lastHover = { app: hovered, t };
   if (cursor && cursorFromHand) drawHandCursor(cursor.x, cursor.y, t);
-  canvas.style.cursor = hovered || (cursor && menu.hitCore(cursor.x, cursor.y)) ? 'pointer' : 'default';
-  if (menu.state === 'standby' && stateEl.textContent !== 'STANDBY') setStateLabel();
+  const overCore = cursor && (stage === 'console' ? hexConsole.hitCore(cursor.x, cursor.y) : menu.hitCore(cursor.x, cursor.y));
+  canvas.style.cursor = hovered || overCore ? 'pointer' : 'default';
 }
 requestAnimationFrame(loop);

@@ -2,3 +2,6 @@ node_modules
 dist
 jarvis.config.json
 *.log
+
+# 參考用的錄影（別人的作品，不上傳）
+展示影片/

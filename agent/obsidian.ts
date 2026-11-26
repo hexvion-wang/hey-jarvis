@@ -1,5 +1,5 @@
 // Obsidian vault 存取：找日報、用檔名搜尋筆記、用 Obsidian 開檔
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, stat, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, resolve, relative, sep, basename } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -55,6 +55,39 @@ export async function findDaily(cfg: VaultConfig, offset: number) {
     .reverse();
   if (!dated.length) return { file: null, date: wanted, wanted, fallback: true };
   return { file: toFound(cfg, join(dir, `${dated[0]}.md`)), date: dated[0], wanted, fallback: true };
+}
+
+// ---- 日報摘要（給 HEX 主控台的卡片） ----
+const stripMd = (s: string) =>
+  s
+    .replace(/==🟡?|==/g, '')
+    .replace(/\*\*|__|`/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, '$2')
+    .trim();
+
+export async function summarizeDaily(cfg: VaultConfig) {
+  const r = await findDaily(cfg, 0);
+  if (!r.file) return null;
+  const text = await readFile(r.file.path, 'utf8');
+  const body = text.replace(/^---[\s\S]*?\n---\s*/, '');
+  const lines = body.split(/\r?\n/);
+
+  const h1 = lines.find((l) => l.startsWith('# '));
+  const title = h1 ? stripMd(h1.slice(2)) : r.date;
+  const verdict = title.split('｜')[1] ?? '';
+
+  // 結論段落的前幾個重點；找不到就用全文前幾個條列
+  let start = lines.findIndex((l) => /^#{2,3} .*結論/.test(l));
+  if (start < 0) start = 0;
+  const bullets: string[] = [];
+  for (let i = start + 1; i < lines.length && bullets.length < 4; i++) {
+    if (start > 0 && /^#{1,2} /.test(lines[i])) break;
+    const m = lines[i].match(/^\s*(?:[-*]|\d+\.)\s+(.*)/);
+    if (m) bullets.push(stripMd(m[1]));
+  }
+  const sections = lines.filter((l) => /^## /.test(l)).map((l) => stripMd(l.slice(3)));
+  return { date: r.date, fallback: r.fallback, rel: r.file.rel, title, verdict, bullets, sections };
 }
 
 // ---- 用檔名搜尋 ----
