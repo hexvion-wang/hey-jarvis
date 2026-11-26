@@ -142,13 +142,13 @@ function loop() {
     const g = gestures.update(vp, result.landmarks[0], now);
     if (controller()) {
       // 控制器模式：手的位置和捏的動作傳給電腦，手機自己不處理點擊
-      link.send({ type: 'hand', ok: g.hasHand, x: g.raw.x, y: g.raw.y });
+      link.send({ type: 'hand', ok: g.hasHand, x: g.raw.x, y: g.raw.y, open: g.open });
       if (g.pinchStart) link.send({ type: 'pinch', down: true });
       if (g.pinchEnd) link.send({ type: 'pinch', down: false });
     } else if (g.pinchStart && g.clickPos) {
       press(g.clickPos.x, g.clickPos.y, now, true);
     }
-    gestureEl.textContent = g.hasHand ? `${g.pinching ? 'PINCH' : 'POINT'} ${g.ratio.toFixed(2)}` : 'NO HAND';
+    gestureEl.textContent = g.hasHand ? `${g.pinching ? 'PINCH' : g.open ? 'OPEN' : 'POINT'} ${g.ratio.toFixed(2)}` : 'NO HAND';
     gestureEl.classList.toggle('pinch', g.pinching);
 
     frames++;

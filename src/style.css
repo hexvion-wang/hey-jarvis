@@ -525,3 +525,33 @@ body.hex.ar-live { background: #000; }
 }
 #arBtn:hover { border-color: #ffc940; color: #ffc940; }
 #arBtn.on { border-color: #7dffb0; color: #7dffb0; box-shadow: 0 0 12px rgba(125, 255, 176, 0.4); }
+
+/* ===== HEX：拍手偵測按鈕 ===== */
+#micBtn {
+  position: fixed;
+  top: 104px;
+  right: 24px;
+  overflow: hidden;
+  padding: 7px 14px;
+  border: 1px solid rgba(0, 229, 255, 0.6);
+  border-radius: 999px;
+  background: rgba(0, 18, 30, 0.6);
+  color: #00e5ff;
+  font: 600 12px ui-monospace, Consolas, monospace;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  z-index: 5;
+}
+#micBtn:hover { border-color: #ffc940; color: #ffc940; }
+#micBtn.on { border-color: #7dffb0; color: #7dffb0; }
+#micBtn.clap { background: rgba(255, 201, 64, 0.45); color: #fff; }
+#micLevel {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 0;
+  background: #7dffb0;
+  box-shadow: 0 0 6px #7dffb0;
+  transition: width 0.05s;
+}

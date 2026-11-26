@@ -67,6 +67,8 @@ export interface GestureState {
   ratio: number;
   /** 未平滑的游標位置（0~1，已鏡像，以鏡頭畫面為準），給遠端控制用 */
   raw: { x: number; y: number };
+  /** 五指張開（手掌攤開） */
+  open: boolean;
 }
 
 export class GestureTracker {
@@ -85,6 +87,7 @@ export class GestureTracker {
     clickPos: null,
     ratio: 1,
     raw: { x: 0.5, y: 0.5 },
+    open: false,
   };
 
   constructor(public config: GestureConfig = DEFAULT_CONFIG) {}
@@ -115,6 +118,13 @@ export class GestureTracker {
     s.ratio = dist(px(4), px(8)) / palm;
 
     s.raw = { x: 1 - (hand[4].x + hand[8].x) / 2, y: (hand[4].y + hand[8].y) / 2 };
+
+    // ---- 五指張開：四指指尖離手腕比第二指節遠很多，拇指也張開，而且不是在捏 ----
+    const w = px(0);
+    const extended = (tip: number, pip: number) => dist(px(tip), w) > dist(px(pip), w) * 1.25;
+    const fingers = extended(8, 6) && extended(12, 10) && extended(16, 14) && extended(20, 18);
+    const thumbOut = dist(px(4), px(5)) / palm > 0.4;
+    s.open = fingers && thumbOut && s.ratio > 0.7;
 
     // ---- 游標：拇指尖與食指尖的中點 ----
     const mid = toScreen(vp, (hand[4].x + hand[8].x) / 2, (hand[4].y + hand[8].y) / 2);

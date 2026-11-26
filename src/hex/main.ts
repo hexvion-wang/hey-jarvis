@@ -7,6 +7,7 @@ import { APPS, type AppDef } from './apps';
 import { BUILD_ID, ensureLatest } from '../version';
 import { DeskLink } from '../shared/link';
 import { OneEuro } from '../phone/gestures';
+import { ClapDetector } from './clap';
 
 document.getElementById('ver')!.textContent = BUILD_ID;
 ensureLatest();
@@ -234,6 +235,84 @@ function toggleAR() {
   toast(arOn ? 'AR 鏡頭開啟中…' : 'AR 鏡頭已關閉');
 }
 $('arBtn').addEventListener('click', toggleAR);
+
+// ---- 張開手掌停 1 秒：待機時喚醒，其他時候退回上一段 ----
+const PALM_HOLD_MS = 1000;
+let palmSince = 0; // 手掌張開開始的時間（0 = 沒張開）
+let palmArmed = true; // 觸發後要先放下手才能再觸發
+
+function updatePalm(open: boolean, t: number) {
+  if (!open) {
+    palmSince = 0;
+    palmArmed = true;
+    return;
+  }
+  if (!palmArmed) return;
+  if (!palmSince) palmSince = t;
+  if (t - palmSince >= PALM_HOLD_MS) {
+    palmArmed = false;
+    palmSince = 0;
+    if (stage === 'standby') goStage('console');
+    else stepStage(-1);
+    toast(stage === 'console' ? '✋ HEX 主控台' : stage === 'holo' ? '✋ 全息模式' : '✋ 待機');
+  }
+}
+
+/** 張開手掌時，游標外圈的進度環（1 秒填滿） */
+function drawPalmRing(x: number, y: number, t: number) {
+  if (!palmSince) return;
+  const k = Math.min(1, (t - palmSince) / PALM_HOLD_MS);
+  ctx.save();
+  ctx.strokeStyle = '#7dffb0';
+  ctx.shadowColor = '#7dffb0';
+  ctx.shadowBlur = 14;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(x, y, 34, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#7dffb0';
+  ctx.font = "600 13px 'Microsoft JhengHei', system-ui, sans-serif";
+  ctx.textAlign = 'center';
+  ctx.fillText(stage === 'standby' ? '✋ 喚醒' : '✋ 返回', x, y + 56);
+  ctx.restore();
+}
+
+// ---- 拍手兩下：前進一段（電腦麥克風） ----
+const micBtn = $('micBtn');
+const micLevel = $('micLevel');
+const clap = new ClapDetector(
+  () => {
+    if (stage === 'holo') return;
+    stepStage(1);
+    toast(stage === 'console' ? '👏 HEX 主控台' : '👏 全息模式');
+  },
+  () => {
+    micBtn.classList.add('clap');
+    setTimeout(() => micBtn.classList.remove('clap'), 150);
+  },
+);
+
+async function toggleMic() {
+  if (clap.running) {
+    clap.stop();
+    localStorage.removeItem('hex-mic');
+    micBtn.classList.remove('on');
+    return toast('拍手偵測已關閉');
+  }
+  try {
+    await clap.start();
+    localStorage.setItem('hex-mic', '1');
+    micBtn.classList.add('on');
+    toast('拍手偵測開啟：拍兩下「啪、啪」前進一段');
+  } catch {
+    toast('麥克風權限被拒絕：點網址列左邊的圖示，把麥克風改成「允許」', 5000);
+  }
+}
+micBtn.addEventListener('click', toggleMic);
+// 之前開過就自動開（瀏覽器記得麥克風權限時不會再問）
+if (localStorage.getItem('hex-mic')) toggleMic();
+setInterval(() => (micLevel.style.width = `${Math.round(clap.level * 100)}%`), 50);
 const fx = new OneEuro(1.2, 0.006);
 const fy = new OneEuro(1.2, 0.006);
 let handT = 0; // 最後一次收到手的位置
@@ -259,6 +338,7 @@ const link = new DeskLink({
   onMessage(msg) {
     const t = performance.now();
     if (msg.type === 'hand') {
+      updatePalm(msg.ok && !!msg.open && !handPinch && !panels.dragging, t);
       if (!msg.ok) {
         fx.reset();
         fy.reset();
@@ -376,6 +456,7 @@ function loop() {
   panels.tick();
   if (panels.dragging) lastActivity = t;
   if (cursor && cursorFromHand) drawHandCursor(cursor.x, cursor.y, t);
+  if (cursor && cursorFromHand) drawPalmRing(cursor.x, cursor.y, t);
   const overCore = cursor && (stage === 'console' ? hexConsole.hitCore(cursor.x, cursor.y) : menu.hitCore(cursor.x, cursor.y));
   canvas.style.cursor = hovered || overCore ? 'pointer' : 'default';
 }
