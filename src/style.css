@@ -475,3 +475,9 @@ body.controller #ctrlHint { display: flex; }
 .chat-msg { margin: 8px 0; padding: 10px 12px; border-radius: 8px; font: 14px/1.6 'Microsoft JhengHei', system-ui, sans-serif; }
 .chat-msg.hex { background: rgba(0, 229, 255, 0.08); border: 1px solid rgba(0, 229, 255, 0.25); }
 .chat-input { margin-top: 12px; padding: 10px 12px; border: 1px dashed rgba(0, 229, 255, 0.35); border-radius: 8px; font-size: 13px; opacity: 0.6; }
+/* 抓住內容區＝捲動：游標與邊框提示 */
+.hpanel .hp-body { cursor: ns-resize; }
+.hpanel .md { user-select: none; }
+.hpanel.grabbed.scrolling { --edge: 0, 229, 255; }
+.hpanel.grabbed.scrolling .hp-body { box-shadow: inset 3px 0 0 #7dffb0; }
+.hpanel .hp-head { cursor: grab; }

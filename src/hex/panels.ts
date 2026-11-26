@@ -1,7 +1,9 @@
 /**
  * HEX 浮動玻璃面板（DOM）。滑鼠與 iPhone 手勢共用同一套操作：
  * - 游標停在面板上 → 金色邊框（hover）
- * - 按住滑鼠 / 捏住 → 綠色邊框（grab），可以拖曳
+ * - 按住滑鼠 / 捏住「標題列」→ 綠色邊框（grab），拖曳移動面板
+ * - 按住滑鼠 / 捏住「內容區」→ 上下拖曳捲動內容（像手機滑動）
+ * - 手勢拖曳會減速＋平滑，並有一小段防誤觸距離
  * - 面板裡有 data-action 的按鈕 → 點擊（例如 ✕ 關閉、捲動、在 Obsidian 開啟）
  */
 
@@ -25,11 +27,33 @@ interface Open {
   body: HTMLElement;
 }
 
+/** 手勢拖曳：手移動距離 × 這個倍率（游標本身已放大過，拖曳時收斂一點） */
+const GESTURE_MOVE_GAIN = 0.6;
+const GESTURE_SCROLL_GAIN = 1.4;
+/** 捏下後要移動超過這個距離才開始拖曳／捲動（像素） */
+const DEAD_ZONE = 14;
+
+interface Drag {
+  o: Open;
+  mode: 'move' | 'scroll';
+  gesture: boolean;
+  startX: number;
+  startY: number;
+  startLeft: number;
+  startTop: number;
+  startScroll: number;
+  active: boolean;
+  /** 目標位置（手勢時由 tick() 平滑靠近） */
+  left: number;
+  top: number;
+  scroll: number;
+}
+
 export class Panels {
   private defs = new Map<string, PanelDef>();
   private open = new Map<string, Open>();
   private z = 10;
-  private drag: { o: Open; dx: number; dy: number } | null = null;
+  private drag: Drag | null = null;
   private hoverEl: HTMLElement | null = null;
 
   constructor(private root: HTMLElement) {}
@@ -110,12 +134,12 @@ export class Panels {
       e.stopPropagation();
       const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement | null;
       if (btn) return this.action(o, btn.dataset.action!);
-      // 捲軸區域留給瀏覽器捲動
+      // 捲軸本身留給瀏覽器
       if ((e.target as HTMLElement).closest('.hp-body') && e.offsetX > (e.target as HTMLElement).clientWidth) return;
-      this.grab(e.clientX, e.clientY, o);
+      this.grab(e.clientX, e.clientY, o, e.target as HTMLElement, false);
       el.setPointerCapture(e.pointerId);
     });
-    el.addEventListener('pointermove', (e) => this.drag && this.moveTo(e.clientX, e.clientY));
+    el.addEventListener('pointermove', (e) => this.drag && !this.drag.gesture && this.moveTo(e.clientX, e.clientY));
     el.addEventListener('pointerup', () => this.release());
   }
 
@@ -152,7 +176,7 @@ export class Panels {
     if (!f) return false;
     const btn = f.el.closest('[data-action]') as HTMLElement | null;
     if (btn) this.action(f.o, btn.dataset.action!);
-    else this.grab(x, y, f.o);
+    else this.grab(x, y, f.o, f.el, true);
     return true;
   }
 
@@ -165,26 +189,81 @@ export class Panels {
     o.def.onAction?.(action, o.body);
   }
 
-  private grab(x: number, y: number, o: Open) {
+  /** 開始拖曳：抓在內容區就是捲動，其他地方（標題列、邊框）就是移動 */
+  private grab(x: number, y: number, o: Open, target: HTMLElement, gesture: boolean) {
     const r = o.el.getBoundingClientRect();
-    this.drag = { o, dx: x - r.left, dy: y - r.top };
+    const mode = target.closest('.hp-body') ? 'scroll' : 'move';
+    this.drag = {
+      o,
+      mode,
+      gesture,
+      startX: x,
+      startY: y,
+      startLeft: r.left,
+      startTop: r.top,
+      startScroll: o.body.scrollTop,
+      active: !gesture, // 滑鼠立刻開始；手勢要先超過防誤觸距離
+      left: r.left,
+      top: r.top,
+      scroll: o.body.scrollTop,
+    };
     o.el.style.zIndex = String(++this.z);
     o.el.classList.add('grabbed');
+    o.el.classList.toggle('scrolling', mode === 'scroll');
   }
 
   moveTo(x: number, y: number) {
-    if (!this.drag) return;
-    const { o, dx, dy } = this.drag;
-    const r = o.el.getBoundingClientRect();
-    const left = Math.min(window.innerWidth - 60, Math.max(60 - r.width, x - dx));
-    const top = Math.min(window.innerHeight - 40, Math.max(0, y - dy));
+    const d = this.drag;
+    if (!d) return;
+    let dx = x - d.startX;
+    let dy = y - d.startY;
+    if (!d.active) {
+      if (Math.hypot(dx, dy) < DEAD_ZONE) return;
+      // 超過防誤觸距離後，從這裡重新起算，避免一開始跳一下
+      d.active = true;
+      d.startX = x;
+      d.startY = y;
+      dx = 0;
+      dy = 0;
+    }
+    if (d.mode === 'scroll') {
+      d.scroll = d.startScroll - dy * (d.gesture ? GESTURE_SCROLL_GAIN : 1);
+      if (!d.gesture) d.o.body.scrollTop = d.scroll;
+      return;
+    }
+    const k = d.gesture ? GESTURE_MOVE_GAIN : 1;
+    const r = d.o.el.getBoundingClientRect();
+    d.left = Math.min(window.innerWidth - 60, Math.max(60 - r.width, d.startLeft + dx * k));
+    d.top = Math.min(window.innerHeight - 40, Math.max(0, d.startTop + dy * k));
+    if (!d.gesture) this.apply(d.o, d.left, d.top);
+  }
+
+  private apply(o: Open, left: number, top: number) {
     o.el.style.left = `${left}px`;
     o.el.style.top = `${top}px`;
   }
 
+  /** 每一幀呼叫：手勢拖曳時讓面板／捲動平滑地靠近目標 */
+  tick() {
+    const d = this.drag;
+    if (!d || !d.gesture || !d.active) return;
+    if (d.mode === 'scroll') {
+      d.o.body.scrollTop += (d.scroll - d.o.body.scrollTop) * 0.35;
+      return;
+    }
+    const r = d.o.el.getBoundingClientRect();
+    this.apply(d.o, r.left + (d.left - r.left) * 0.3, r.top + (d.top - r.top) * 0.3);
+  }
+
   release() {
-    if (!this.drag) return;
-    this.drag.o.el.classList.remove('grabbed');
+    const d = this.drag;
+    if (!d) return;
+    // 手勢放開時直接停在目標位置
+    if (d.gesture && d.active) {
+      if (d.mode === 'move') this.apply(d.o, d.left, d.top);
+      else d.o.body.scrollTop = d.scroll;
+    }
+    d.o.el.classList.remove('grabbed', 'scrolling');
     this.drag = null;
   }
 

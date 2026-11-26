@@ -323,6 +323,7 @@ function loop() {
   hexConsole.draw(ctx, t, dt, menu.coreR);
   if (hovered && !(cursorFromHand && handPinch)) lastHover = { app: hovered, t };
   panels.hoverAt(cursorFromHand ? cursor : null);
+  panels.tick();
   if (panels.dragging) lastActivity = t;
   if (cursor && cursorFromHand) drawHandCursor(cursor.x, cursor.y, t);
   const overCore = cursor && (stage === 'console' ? hexConsole.hitCore(cursor.x, cursor.y) : menu.hitCore(cursor.x, cursor.y));
