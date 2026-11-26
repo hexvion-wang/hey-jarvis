@@ -4,6 +4,7 @@ import { speak, voiceName } from '../shared/speak';
 import { drawBackdrop } from '../hud/renderer';
 import { drawBoot, BOOT_MS } from '../hud/boot';
 import { BUILD_ID, ensureLatest } from '../version';
+import { getCustom, setCustom, phraseFromTraining } from './wake';
 
 document.getElementById('ver')!.textContent = BUILD_ID;
 ensureLatest();
@@ -99,6 +100,64 @@ function onMicState(s: MicState, detail?: string) {
   if (detail) transcriptEl.textContent = `⚠ ${detail}`;
 }
 
+// ---- 最近聽到的句子 ----
+const historyEl = $('history');
+function addHistory(text: string, woke: boolean) {
+  if (!text) return;
+  const li = document.createElement('li');
+  li.textContent = `${woke ? '✓' : '·'} ${text}`;
+  li.classList.toggle('woke', woke);
+  historyEl.prepend(li);
+  while (historyEl.children.length > 8) historyEl.lastElementChild!.remove();
+}
+
+// ---- 訓練模式：記住你的「Hey Jarvis」被辨識成什麼字 ----
+const TRAIN_COUNT = 5;
+const trainBtn = $('trainBtn') as HTMLButtonElement;
+const clearBtn = $('clearBtn') as HTMLButtonElement;
+const learnedEl = $('learned');
+let training: string[] | null = null;
+
+function renderLearned() {
+  const list = getCustom();
+  learnedEl.textContent = list.length ? list.join('、') : '（還沒有）';
+}
+renderLearned();
+
+function startTraining() {
+  if (!listener) return;
+  training = [];
+  listener.training = true;
+  trainBtn.disabled = true;
+  headlineEl.textContent = `訓練中：請說「Hey Jarvis」（1/${TRAIN_COUNT}）`;
+  subEl.textContent = '每說完一次停一下，等下面出現文字再說下一次';
+}
+
+function onTrainFinal(text: string) {
+  if (!training || !listener) return;
+  const p = phraseFromTraining(text);
+  if (!p) return;
+  training.push(p);
+  if (training.length < TRAIN_COUNT) {
+    headlineEl.textContent = `訓練中：請說「Hey Jarvis」（${training.length + 1}/${TRAIN_COUNT}）`;
+    subEl.textContent = `剛剛聽到：「${text}」`;
+    return;
+  }
+  setCustom([...getCustom(), ...training]);
+  renderLearned();
+  training = null;
+  listener.training = false;
+  trainBtn.disabled = false;
+  setMode('standby');
+  subEl.textContent = '訓練完成！現在說「Hey Jarvis」試試看';
+}
+
+trainBtn.addEventListener('click', startTraining);
+clearBtn.addEventListener('click', () => {
+  setCustom([]);
+  renderLearned();
+});
+
 // 空白鍵：模擬喚醒（不用講話也能測動畫和語音）
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Space' && startScreen.classList.contains('hidden')) {
@@ -124,6 +183,10 @@ startBtn.addEventListener('click', () => {
       if (mode !== 'standby') awakeUntil = performance.now() + AWAKE_MS;
     },
     onWake: (text) => wake(text),
+    onFinal(text, woke) {
+      if (training) onTrainFinal(text);
+      else addHistory(text, woke);
+    },
     onState: onMicState,
   });
   listener.start();

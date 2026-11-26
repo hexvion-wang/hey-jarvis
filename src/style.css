@@ -188,3 +188,36 @@ body.desk #tint {
 body.awake #headline { color: var(--gold); text-shadow: 0 0 14px var(--gold); }
 #mic.on { color: #7dffb0; text-shadow: 0 0 6px #7dffb0; }
 #mic.err { color: var(--red); text-shadow: 0 0 6px var(--red); }
+
+/* 電腦版左下角：訓練與紀錄 */
+#panel {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  width: min(320px, 40vw);
+  padding: 14px;
+  border: 1px solid var(--cyan-dim);
+  border-radius: 10px;
+  background: rgba(0, 12, 24, 0.7);
+  font-size: 13px;
+  z-index: 6;
+}
+#panel .row { display: flex; gap: 8px; margin-bottom: 10px; }
+#panel button {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid var(--cyan);
+  border-radius: 6px;
+  background: rgba(0, 229, 255, 0.1);
+  color: var(--cyan);
+  font: inherit;
+  cursor: pointer;
+}
+#panel button:hover { background: rgba(0, 229, 255, 0.25); }
+#panel button:disabled { opacity: 0.4; cursor: default; }
+#panel #clearBtn { flex: 0 0 auto; }
+#panel .label { opacity: 0.7; margin: 6px 0 4px; }
+#learned { color: var(--gold); opacity: 1; }
+#history { list-style: none; font: 13px/1.6 ui-monospace, Consolas, monospace; max-height: 180px; overflow: hidden; }
+#history li { color: #8fb8c4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#history li.woke { color: #7dffb0; }

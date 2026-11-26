@@ -1,24 +1,20 @@
+import { isWakeWord } from './wake';
+
 // Web Speech API 在 Chrome 叫 webkitSpeechRecognition；自己宣告需要的最小型別
-interface RecResult { isFinal: boolean; 0: { transcript: string } }
+interface RecAlt { transcript: string }
+interface RecResult extends ArrayLike<RecAlt> { isFinal: boolean }
 interface RecEvent { resultIndex: number; results: ArrayLike<RecResult> }
 interface Rec {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
+  maxAlternatives: number;
   onresult: ((e: RecEvent) => void) | null;
   onerror: ((e: { error: string }) => void) | null;
   onend: (() => void) | null;
   onstart: (() => void) | null;
   start(): void;
   stop(): void;
-  abort(): void;
-}
-
-/** 喚醒詞：Jarvis 和各種中文同音字 */
-const WAKE_RE = /jarvis|jervis|javis|jarvas|[賈加嘉家佳甲假價夾][維唯為威偉][斯絲思司]/i;
-
-export function isWakeWord(text: string) {
-  return WAKE_RE.test(text.replace(/\s+/g, ''));
 }
 
 export type MicState = 'off' | 'listening' | 'error';
@@ -26,6 +22,8 @@ export type MicState = 'off' | 'listening' | 'error';
 export interface VoiceEvents {
   /** 即時辨識文字（還沒說完也會更新） */
   onTranscript(text: string, isFinal: boolean): void;
+  /** 一句話說完（最終結果）；woke 表示這句有沒有叫醒 */
+  onFinal(text: string, woke: boolean): void;
   /** 聽到喚醒詞；text 是整句話（之後可以拿來解析指令） */
   onWake(text: string): void;
   onState(state: MicState, detail?: string): void;
@@ -44,6 +42,10 @@ export class VoiceListener {
   private muted = false;
   private lastWake = 0;
   private restartDelay = 300;
+  /** 訓練模式：不觸發喚醒，只回報最終結果 */
+  training = false;
+  /** 這句話是否已經叫醒過（避免同一句的中途結果和最終結果各觸發一次） */
+  private utteranceWoke = false;
 
   constructor(private ev: VoiceEvents, lang = 'zh-TW') {
     const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -51,6 +53,7 @@ export class VoiceListener {
     this.rec.lang = lang;
     this.rec.continuous = true;
     this.rec.interimResults = true;
+    this.rec.maxAlternatives = 5;
 
     this.rec.onstart = () => {
       this.restartDelay = 300;
@@ -61,12 +64,22 @@ export class VoiceListener {
       if (this.muted) return;
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        const text = r[0].transcript.trim();
-        this.ev.onTranscript(text, r.isFinal);
-        // 中途結果就比對，反應比較快；觸發後 4 秒內不重複觸發
-        if (isWakeWord(text) && performance.now() - this.lastWake > 4000) {
-          this.lastWake = performance.now();
-          this.ev.onWake(text);
+        const best = r[0].transcript.trim();
+        this.ev.onTranscript(best, r.isFinal);
+
+        if (!this.training && !this.utteranceWoke) {
+          // 任何一個候選結果像 Jarvis 就算
+          const alts = Array.from({ length: r.length }, (_, k) => r[k].transcript);
+          if (alts.some(isWakeWord) && performance.now() - this.lastWake > 3000) {
+            this.lastWake = performance.now();
+            this.utteranceWoke = true;
+            this.ev.onWake(best);
+          }
+        }
+
+        if (r.isFinal) {
+          this.ev.onFinal(best, this.utteranceWoke);
+          this.utteranceWoke = false;
         }
       }
     };
@@ -87,6 +100,7 @@ export class VoiceListener {
     };
 
     this.rec.onend = () => {
+      this.utteranceWoke = false;
       if (!this.running) {
         this.ev.onState('off');
         return;
