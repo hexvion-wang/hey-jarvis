@@ -54,7 +54,7 @@ function setMode(m: Mode) {
   document.body.classList.toggle('awake', m !== 'standby');
   if (m === 'standby') {
     headlineEl.textContent = '待命中';
-    subEl.textContent = '說「Hey Jarvis」叫醒我　·　空白鍵模擬喚醒　·　Esc 回到待命';
+    subEl.textContent = '說「嘿，海克斯」或「Hey Hex」叫醒我　·　空白鍵模擬喚醒　·　Esc 回到待命';
   }
 }
 
@@ -124,7 +124,7 @@ function addHistory(text: string, woke: boolean) {
   while (historyEl.children.length > 8) historyEl.lastElementChild!.remove();
 }
 
-// ---- 訓練模式：記住你的「Hey Jarvis」被辨識成什麼字 ----
+// ---- 訓練模式：記住你的喚醒詞被辨識成什麼字 ----
 const TRAIN_COUNT = 5;
 const trainBtn = $('trainBtn') as HTMLButtonElement;
 const clearBtn = $('clearBtn') as HTMLButtonElement;
@@ -142,7 +142,7 @@ function startTraining() {
   training = [];
   listener.training = true;
   trainBtn.disabled = true;
-  headlineEl.textContent = `訓練中：請說「Hey Jarvis」（1/${TRAIN_COUNT}）`;
+  headlineEl.textContent = `訓練中：請說你的喚醒詞（例如「嘿，海克斯」）（1/${TRAIN_COUNT}）`;
   subEl.textContent = '每說完一次停一下，等下面出現文字再說下一次';
 }
 
@@ -152,7 +152,7 @@ function onTrainFinal(text: string) {
   if (!p) return;
   training.push(p);
   if (training.length < TRAIN_COUNT) {
-    headlineEl.textContent = `訓練中：請說「Hey Jarvis」（${training.length + 1}/${TRAIN_COUNT}）`;
+    headlineEl.textContent = `訓練中：請說你的喚醒詞（例如「嘿，海克斯」）（${training.length + 1}/${TRAIN_COUNT}）`;
     subEl.textContent = `剛剛聽到：「${text}」`;
     return;
   }
@@ -162,7 +162,7 @@ function onTrainFinal(text: string) {
   listener.training = false;
   trainBtn.disabled = false;
   setMode('standby');
-  subEl.textContent = '訓練完成！現在說「Hey Jarvis」試試看';
+  subEl.textContent = '訓練完成！現在叫我試試看';
 }
 
 trainBtn.addEventListener('click', startTraining);
