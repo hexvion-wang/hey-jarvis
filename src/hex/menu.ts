@@ -209,6 +209,12 @@ export class HexMenu {
     return null;
   }
 
+  /** 節點在 Dock 上的位置（面板從這裡飛出來） */
+  dockPos(id: string) {
+    const n = this.nodes.find((n) => n.app.id === id);
+    return n ? { x: n.dx, y: n.dy } : { x: this.cx, y: this.H };
+  }
+
   flash(id: string, t: number) {
     const n = this.nodes.find((n) => n.app.id === id);
     if (n) n.flashT = t;

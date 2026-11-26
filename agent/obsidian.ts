@@ -90,6 +90,15 @@ export async function summarizeDaily(cfg: VaultConfig) {
   return { date: r.date, fallback: r.fallback, rel: r.file.rel, title, verdict, bullets, sections };
 }
 
+/** 完整日報內容（去掉 frontmatter），給 HEX 的日報面板顯示 */
+export async function readDaily(cfg: VaultConfig) {
+  const r = await findDaily(cfg, 0);
+  if (!r.file) return null;
+  const text = await readFile(r.file.path, 'utf8');
+  const markdown = text.replace(/^---[\s\S]*?\n---\s*/, '').slice(0, 200_000);
+  return { date: r.date, fallback: r.fallback, rel: r.file.rel, markdown };
+}
+
 // ---- 用檔名搜尋 ----
 const SKIP_DIRS = new Set(['node_modules', 'exports']);
 interface Note { path: string; name: string; mtime: number }

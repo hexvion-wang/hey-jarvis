@@ -1,6 +1,8 @@
 import '../style.css';
 import { HexMenu } from './menu';
 import { HexConsole } from './console';
+import { Panels } from './panels';
+import { definePanels, PANEL_OF } from './panelDefs';
 import { APPS, type AppDef } from './apps';
 import { BUILD_ID, ensureLatest } from '../version';
 import { DeskLink } from '../shared/link';
@@ -21,6 +23,7 @@ const IDLE_CONSOLE_MS = 90000; // 主控台多久沒動作回到待機
 
 const menu = new HexMenu();
 const hexConsole = new HexConsole();
+const panels = new Panels(document.body);
 let W = 1;
 let H = 1;
 
@@ -96,7 +99,10 @@ export function goStage(next: Stage) {
   const t = performance.now();
   lastActivity = t;
   if (stage === 'console') hexConsole.close(t);
-  if (stage === 'holo') menu.close(t);
+  if (stage === 'holo') {
+    menu.close(t);
+    panels.closeAll();
+  }
   stage = next;
   pending = next === 'standby' ? null : next;
   if (next === 'console') refreshDaily();
@@ -111,7 +117,7 @@ export function stepStage(dir: 1 | -1) {
 
 // ---- 主控台資料 ----
 async function refreshSys() {
-  if (!hexConsole.visible && pending !== 'console') return;
+  if (!hexConsole.visible && pending !== 'console' && !panels.isOpen('sys')) return;
   if (agentOk) {
     try {
       const r = await api('/api/sys');
@@ -134,6 +140,13 @@ async function refreshSys() {
 }
 setInterval(refreshSys, 2000);
 
+definePanels(panels, {
+  api,
+  agentOk: () => agentOk,
+  getSys: () => hexConsole.sys,
+  toast,
+});
+
 async function refreshDaily() {
   refreshSys();
   if (!agentOk) return;
@@ -148,7 +161,7 @@ async function refreshDaily() {
 async function launch(app: AppDef) {
   lastActivity = performance.now();
   menu.flash(app.id, performance.now());
-  if (app.kind === 'panel') return toast(`「${app.name}」面板下一步就會做好`);
+  if (app.kind === 'panel') return panels.toggle(PANEL_OF[app.id], menu.dockPos(app.id));
   link.send({ type: 'status', headline: `啟動 ${app.name}` });
   if (!agentOk) return toast(`${app.name}：要從本機 agent 開啟（雙擊 啟動Jarvis.cmd）`, 4000);
   toast(`啟動 ${app.name}…`);
@@ -168,6 +181,8 @@ const HOVER_GRACE_MS = 400;
 export function pressAt(x: number, y: number, fromGesture = false) {
   const t = performance.now();
   lastActivity = t;
+  // 手勢點到面板：按鈕就執行，其他地方開始拖曳（滑鼠由面板自己處理）
+  if (fromGesture && panels.pressAt(x, y)) return;
   // 點核心：待機 → 主控台 → 全息；全息時點核心回到主控台
   if (stage === 'standby' && menu.hitCore(x, y)) return goStage('console');
   if (stage === 'console' && hexConsole.hitCore(x, y)) return goStage('holo');
@@ -207,9 +222,11 @@ const link = new DeskLink({
       handT = t;
       lastActivity = t;
       handHistory.push({ ...cursor, t });
+      if (panels.dragging) panels.moveTo(cursor.x, cursor.y);
       while (handHistory.length && t - handHistory[0].t > 300) handHistory.shift();
     } else if (msg.type === 'pinch') {
       handPinch = msg.down;
+      if (!msg.down) panels.release();
       if (msg.down) {
         // 用捏下前約 0.1 秒的位置當點擊點
         const past = handHistory.find((h) => t - h.t <= 120) ?? cursor;
@@ -265,7 +282,7 @@ window.addEventListener('pointerleave', () => {
   if (!cursorFromHand) cursor = null;
 });
 window.addEventListener('pointerdown', (e) => {
-  if ((e.target as HTMLElement).closest('#linkBox')) return;
+  if ((e.target as HTMLElement).closest('#linkBox, .hpanel')) return;
   pressAt(e.clientX, e.clientY);
 });
 window.addEventListener('keydown', (e) => {
@@ -305,6 +322,8 @@ function loop() {
   const hovered = menu.draw(ctx, t, cursor, dt, { core: !hexConsole.visible });
   hexConsole.draw(ctx, t, dt, menu.coreR);
   if (hovered && !(cursorFromHand && handPinch)) lastHover = { app: hovered, t };
+  panels.hoverAt(cursorFromHand ? cursor : null);
+  if (panels.dragging) lastActivity = t;
   if (cursor && cursorFromHand) drawHandCursor(cursor.x, cursor.y, t);
   const overCore = cursor && (stage === 'console' ? hexConsole.hitCore(cursor.x, cursor.y) : menu.hitCore(cursor.x, cursor.y));
   canvas.style.cursor = hovered || overCore ? 'pointer' : 'default';
