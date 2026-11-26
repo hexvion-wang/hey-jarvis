@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000810" />
+    <title>J.A.R.V.I.S. · Desk</title>
+  </head>
+  <body class="desk">
+    <div id="tint"></div>
+    <canvas id="hud"></canvas>
+
+    <div id="status">
+      <span id="clock">--:--:--</span>
+      <span id="mic">MIC OFF</span>
+      <span id="voice">VOICE --</span>
+      <span id="state">STANDBY</span>
+    </div>
+
+    <div id="caption">
+      <p id="headline">待命中</p>
+      <p id="sub">說「Hey Jarvis」叫醒我　·　按空白鍵可以模擬喚醒</p>
+      <p id="transcript"></p>
+    </div>
+
+    <div id="start">
+      <div class="ring r1"></div>
+      <div class="ring r2"></div>
+      <button id="startBtn">啟動 J.A.R.V.I.S.</button>
+      <p class="hint">需要允許使用麥克風 · 版本 <span id="ver"></span></p>
+      <p id="error"></p>
+    </div>
+
+    <script type="module" src="./src/desk/main.ts"></script>
+  </body>
+</html>

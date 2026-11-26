@@ -20,6 +20,12 @@ export default defineConfig({
   base: './',
   define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   plugins: [versionFile()],
+  build: {
+    rolldownOptions: {
+      // 兩個頁面：index.html（手機手勢）、desk.html（電腦語音）
+      input: { main: 'index.html', desk: 'desk.html' },
+    },
+  },
   server: {
     // 允許 cloudflared tunnel 的網址連進來
     allowedHosts: ['.trycloudflare.com'],

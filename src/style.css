@@ -153,3 +153,38 @@ body.alert #tint {
     repeating-linear-gradient(0deg, rgba(255, 59, 59, 0.05) 0 1px, transparent 1px 3px),
     radial-gradient(ellipse at center, rgba(40, 0, 0, 0.25), rgba(16, 0, 0, 0.75));
 }
+
+/* ===== 電腦版（desk.html） ===== */
+body.desk #tint {
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 229, 255, 0.04) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, #001a2a, var(--bg) 70%);
+}
+#caption {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 8vh;
+  text-align: center;
+  z-index: 5;
+  pointer-events: none;
+}
+#headline {
+  font-size: clamp(20px, 3vw, 34px);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-shadow: 0 0 12px var(--cyan);
+  transition: color 0.3s;
+}
+#sub { margin-top: 8px; font-size: 14px; opacity: 0.6; }
+#transcript {
+  margin-top: 14px;
+  min-height: 1.5em;
+  font: 16px/1.5 ui-monospace, Consolas, monospace;
+  color: #bdf6ff;
+  opacity: 0.85;
+}
+#transcript.final { color: var(--gold); }
+body.awake #headline { color: var(--gold); text-shadow: 0 0 14px var(--gold); }
+#mic.on { color: #7dffb0; text-shadow: 0 0 6px #7dffb0; }
+#mic.err { color: var(--red); text-shadow: 0 0 6px var(--red); }
