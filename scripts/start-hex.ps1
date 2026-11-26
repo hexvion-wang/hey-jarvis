@@ -6,7 +6,6 @@ $OpenJarvisDir = 'D:\Claude\OpenJarvis'
 $OllamaApp = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama app.exe'
 $Url = 'http://localhost:4000'
 $Api = 'http://127.0.0.1:4000' # 健康檢查用 IPv4（localhost 會先試 IPv6 而逾時）
- = 'http://127.0.0.1:4000'  # 健康檢查用 IPv4（localhost 會先試 IPv6 而逾時）
 Set-Location $Root
 $Host.UI.RawUI.WindowTitle = 'HEX'
 

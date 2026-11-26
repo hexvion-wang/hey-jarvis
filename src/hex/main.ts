@@ -146,6 +146,14 @@ definePanels(panels, {
   agentOk: () => agentOk,
   getSys: () => hexConsole.sys,
   toast,
+  onOpened(ids) {
+    const t = performance.now();
+    lastActivity = t;
+    for (const id of ids) menu.flash(id, t);
+    const names = ids.map((id) => APPS.find((a) => a.id === id)?.name ?? id).join('、');
+    toast(`啟動 ${names}…`);
+    link.send({ type: 'status', headline: `啟動 ${names}` });
+  },
 });
 
 async function refreshDaily() {

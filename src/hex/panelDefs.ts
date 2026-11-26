@@ -8,6 +8,8 @@ interface Deps {
   agentOk(): boolean;
   getSys(): SysInfo | null;
   toast(text: string, ms?: number): void;
+  /** 對話裡開了程式：讓 Dock 上對應的按鈕閃一下 */
+  onOpened?(ids: string[]): void;
 }
 
 /** Dock 按鈕 id → 面板 id */
@@ -120,6 +122,7 @@ export function definePanels(panels: Panels, d: Deps) {
     ['q1', '今天日報的重點是什麼？'],
     ['q2', '我今天還有哪些待辦？'],
     ['q3', '你是誰？能幫我做什麼？'],
+    ['q4', '幫我開 Obsidian'],
   ];
   const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -150,9 +153,12 @@ export function definePanels(panels: Panels, d: Deps) {
       const r = await d.api('/api/chat', { messages: history.slice(-10) });
       if (r.ok) {
         history.push({ role: 'assistant', content: r.text });
+        const opened: string[] = r.opened ?? [];
         wait.innerHTML =
           renderMarkdown(r.text) +
+          (opened.length ? `<div class="chat-opened">${opened.map((id) => `<span>▶ ${esc(id)}</span>`).join('')}</div>` : '') +
           `<div class="chat-meta">${((performance.now() - t0) / 1000).toFixed(1)} 秒${r.daily ? '　·　參考了日報' : ''}</div>`;
+        if (opened.length) d.onOpened?.(opened);
       } else {
         history.pop();
         wait.className = 'chat-msg sys';

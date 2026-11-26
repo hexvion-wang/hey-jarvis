@@ -6,6 +6,7 @@ import { join, extname, resolve, relative } from 'node:path';
 import { spawn } from 'node:child_process';
 import { findDaily, searchNote, openInObsidian, summarizeDaily, readDaily, type VaultConfig } from './obsidian.ts';
 import { getSysInfo } from './sysinfo.ts';
+import { quickOpen, appPrompt, extractOpen, appName } from './appIntent.ts';
 
 const PORT = Number(process.env.JARVIS_PORT) || 4000;
 const ROOT = resolve(import.meta.dirname, '..');
@@ -94,10 +95,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
   // 開啟程式：只能開設定檔 apps 裡列出的程式（用開始功能表的 AppID）
   if (path === '/api/launch') {
     const id = String(body.id ?? '');
-    const appId = Object.hasOwn(apps, id) ? apps[id] : undefined;
-    if (!appId) return send(res, 404, { ok: false, error: 'unknown app' });
-    spawn('explorer.exe', [`shell:AppsFolder\\${appId}`], { detached: true, stdio: 'ignore' }).unref();
-    console.log(`開啟程式：${id}`);
+    if (!launchApp(id)) return send(res, 404, { ok: false, error: 'unknown app' });
     return send(res, 200, { ok: true, id });
   }
 
@@ -122,6 +120,15 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
   send(res, 404, { ok: false, error: 'unknown api' });
 }
 
+/** 開啟程式：只能開設定檔 apps 裡列出的程式（用開始功能表的 AppID） */
+function launchApp(id: string) {
+  const appId = Object.hasOwn(apps, id) ? apps[id] : undefined;
+  if (!appId) return false;
+  spawn('explorer.exe', [`shell:AppsFolder\\${appId}`], { detached: true, stdio: 'ignore' }).unref();
+  console.log(`開啟程式：${id}`);
+  return true;
+}
+
 // ---- HEX 對話：轉給本機的 OpenJarvis（只在 127.0.0.1） ----
 const OPENJARVIS = process.env.OPENJARVIS_URL || 'http://127.0.0.1:8000';
 const CHAT_MODEL = process.env.HEX_MODEL || 'qwen3:8b';
@@ -137,6 +144,15 @@ async function chat(res: ServerResponse, body: Record<string, unknown>) {
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
   if (!lastUser) return send(res, 400, { ok: false, error: 'empty' });
 
+  // 明確的「打開 X」→ 不用等 AI，馬上開
+  const known = Object.keys(apps);
+  const quick = quickOpen(lastUser.content, known);
+  if (quick.length) {
+    const opened = quick.filter((id) => launchApp(id));
+    console.log(`HEX 對話：直接開啟 ${opened.join(', ')}`);
+    return send(res, 200, { ok: true, text: `好的，已經幫你打開 ${opened.map(appName).join('、')}。`, opened });
+  }
+
   let system =
     '你是 HEX，使用者電腦上的 AI 助理（鋼鐵人 Jarvis 風格，冷靜、俐落、友善）。' +
     '一律使用繁體中文（台灣用語），不要用簡體字。回答要簡短口語，通常 2～5 句；要列重點時用短條列。';
@@ -148,6 +164,8 @@ async function chat(res: ServerResponse, body: Record<string, unknown>) {
       system += `\n\n以下是使用者的日報（${d.date}${d.fallback ? '，今天的還沒產生，這是最新一份' : ''}），回答時可以參考：\n${d.markdown.slice(0, 6000)}`;
     }
   }
+
+  system += appPrompt(known);
 
   const t0 = Date.now();
   try {
@@ -169,8 +187,11 @@ async function chat(res: ServerResponse, body: Record<string, unknown>) {
     const text = String(j?.choices?.[0]?.message?.content ?? '')
       .replace(/<think>[\s\S]*?<\/think>/g, '')
       .trim();
-    console.log(`HEX 對話：${(Date.now() - t0) / 1000}s${usedDaily ? `（參考 ${usedDaily}）` : ''}`);
-    return send(res, 200, { ok: true, text: text || '（沒有回應）', daily: usedDaily || undefined });
+    // AI 判斷要開程式時，會在回答裡寫 [[OPEN:id]]
+    const ex = extractOpen(text, known);
+    const opened = ex.ids.filter((id) => launchApp(id));
+    console.log(`HEX 對話：${(Date.now() - t0) / 1000}s${usedDaily ? `（參考 ${usedDaily}）` : ''}${opened.length ? `，開啟 ${opened.join(', ')}` : ''}`);
+    return send(res, 200, { ok: true, text: ex.text || '（沒有回應）', daily: usedDaily || undefined, opened: opened.length ? opened : undefined });
   } catch (e) {
     const down = String(e).includes('ECONNREFUSED') || String((e as any)?.cause).includes('ECONNREFUSED');
     return send(res, 200, { ok: false, error: down ? 'offline' : String(e) });
