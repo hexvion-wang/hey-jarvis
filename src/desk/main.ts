@@ -54,7 +54,7 @@ function setMode(m: Mode) {
   document.body.classList.toggle('awake', m !== 'standby');
   if (m === 'standby') {
     headlineEl.textContent = '待命中';
-    subEl.textContent = '說「Hey Jarvis」叫醒我　·　按空白鍵可以模擬喚醒';
+    subEl.textContent = '說「Hey Jarvis」叫醒我　·　空白鍵模擬喚醒　·　Esc 回到待命';
   }
 }
 
@@ -72,7 +72,20 @@ async function wake(text: string) {
   await speak(GREETING);
   listener?.setMuted(false);
   awakeUntil = performance.now() + AWAKE_MS;
-  if (mode !== 'standby') subEl.textContent = '請說…（步驟 6 會加上指令）';
+  if (mode !== 'standby') subEl.textContent = '請說…（說「待命」或按 Esc 回到待命）';
+}
+
+/** 回到待命：立刻停掉講到一半的話 */
+const STANDBY_RE = /待命|沒事|没事|退下|休息|再見|掰掰|standby|dismiss/i;
+function goStandby(reply = false) {
+  if (mode === 'standby') return;
+  speechSynthesis.cancel();
+  listener?.setMuted(false);
+  setMode('standby');
+  if (reply) {
+    listener?.setMuted(true);
+    speak('好的。').then(() => listener?.setMuted(false));
+  }
 }
 
 // ---- 繪圖迴圈 ----
@@ -158,11 +171,16 @@ clearBtn.addEventListener('click', () => {
   renderLearned();
 });
 
-// 空白鍵：模擬喚醒（不用講話也能測動畫和語音）
+$('standbyBtn').addEventListener('click', () => goStandby());
+
+// 空白鍵：模擬喚醒（不用講話也能測動畫和語音）；Esc：回到待命
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Space' && startScreen.classList.contains('hidden')) {
+  if (!startScreen.classList.contains('hidden')) return;
+  if (e.code === 'Space') {
     e.preventDefault();
     wake('');
+  } else if (e.code === 'Escape') {
+    goStandby();
   }
 });
 
@@ -184,8 +202,10 @@ startBtn.addEventListener('click', () => {
     },
     onWake: (text) => wake(text),
     onFinal(text, woke) {
-      if (training) onTrainFinal(text);
-      else addHistory(text, woke);
+      if (training) return onTrainFinal(text);
+      addHistory(text, woke);
+      // 醒著的時候說「待命 / 沒事了 / 退下」就回到待命
+      if (!woke && mode !== 'standby' && STANDBY_RE.test(text)) goStandby(true);
     },
     onState: onMicState,
   });
