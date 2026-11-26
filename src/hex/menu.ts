@@ -6,8 +6,12 @@ import { APPS, GROUPS, type AppDef, type GroupId } from './apps';
 
 const CYAN = '0, 229, 255';
 const GOLD = '255, 201, 64';
-export const OPEN_MS = 2000;
-export const CLOSE_MS = 650;
+export const OPEN_MS = 5200;
+export const CLOSE_MS = 1000;
+/** 節點從中心飛出的時間 */
+const FLY_MS = 1500;
+/** 節點飛出時繞的角度（約 0.6 圈） */
+const SPIN = Math.PI * 1.25;
 
 type State = 'standby' | 'opening' | 'open' | 'closing';
 
@@ -25,11 +29,7 @@ interface Node {
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const easeOut = (x: number) => 1 - Math.pow(1 - clamp01(x), 3);
-const easeOutBack = (x: number) => {
-  const c = 1.6;
-  const k = clamp01(x) - 1;
-  return 1 + (c + 1) * k * k * k + c * k * k;
-};
+const easeInOut = (x: number) => 0.5 - 0.5 * Math.cos(Math.PI * clamp01(x));
 
 export class HexMenu {
   state: State = 'standby';
@@ -61,7 +61,7 @@ export class HexMenu {
           angle: -Math.PI / 2 + (slot + 0.5) * step,
           x: 0,
           y: 0,
-          delay: 650 + order * 60,
+          delay: 1300 + order * 160,
           hover: 0,
           flashT: -1e9,
           available: true,
@@ -133,7 +133,7 @@ export class HexMenu {
     const e = t - this.t0;
     if (this.state === 'standby') return 0;
     if (this.state === 'open') return 1;
-    if (this.state === 'opening') return clamp01((e - n.delay) / 450);
+    if (this.state === 'opening') return clamp01((e - n.delay) / FLY_MS);
     return 1 - clamp01(e / CLOSE_MS);
   }
 
@@ -142,7 +142,7 @@ export class HexMenu {
     const e = t - this.t0;
     if (this.state === 'standby') return 0;
     if (this.state === 'open') return 1;
-    if (this.state === 'opening') return clamp01(e / 900);
+    if (this.state === 'opening') return clamp01(e / 2400);
     return 1 - clamp01(e / CLOSE_MS);
   }
 
@@ -268,9 +268,9 @@ export class HexMenu {
     ctx.shadowColor = `rgb(${CYAN})`;
     ctx.shadowBlur = 20;
     for (const [delay, dur, maxR, w] of [
-      [0, 700, 1.35, 4],
-      [150, 800, 1.1, 2],
-      [300, 900, 0.8, 1.5],
+      [0, 1500, 1.35, 4],
+      [350, 1700, 1.1, 2],
+      [700, 1900, 0.8, 1.5],
     ] as const) {
       const k = clamp01((e - delay) / dur);
       if (k <= 0 || k >= 1) continue;
@@ -281,7 +281,7 @@ export class HexMenu {
       ctx.stroke();
     }
     // 中心白光
-    const k = clamp01(e / 400);
+    const k = clamp01(e / 900);
     if (k < 1) {
       const g = ctx.createRadialGradient(this.cx, this.cy, 0, this.cx, this.cy, this.coreR * 3);
       g.addColorStop(0, `rgba(230,255,255,${0.8 * (1 - k)})`);
@@ -351,9 +351,12 @@ export class HexMenu {
   private drawNode(ctx: CanvasRenderingContext2D, n: Node, t: number, dt: number, hovered: boolean) {
     const p = this.nodeProgress(n, t);
     if (p <= 0) return;
-    const fly = this.state === 'closing' ? easeOut(p) : easeOutBack(p);
-    const x = this.cx + (n.x - this.cx) * fly;
-    const y = this.cy + (n.y - this.cy) * fly;
+    // 螺旋飛行：一邊往外飛、一邊旋轉，越接近定位轉得越慢
+    const dist = this.R * easeOut(p);
+    const ang = n.angle - (1 - easeInOut(p)) * SPIN;
+    const x = this.cx + Math.cos(ang) * dist;
+    const y = this.cy + Math.sin(ang) * dist;
+    const moving = p < 1;
 
     n.hover += ((hovered ? 1 : 0) - n.hover) * Math.min(1, dt / 90);
     const flash = clamp01(1 - (t - n.flashT) / 700);
@@ -364,11 +367,25 @@ export class HexMenu {
     ctx.save();
     ctx.globalAlpha = Math.min(1, p * 1.5) * dim;
 
+    // 飛行中的軌跡尾巴（沿著目前半徑的一小段弧）
+    if (moving && dist > this.coreR) {
+      const tail = 0.5 * (1 - p) + 0.1;
+      const tg = ctx.createConicGradient(ang - tail, this.cx, this.cy);
+      tg.addColorStop(0, `rgba(${CYAN}, 0)`);
+      tg.addColorStop(tail / (Math.PI * 2), `rgba(${CYAN}, ${0.7 * (1 - p)})`);
+      tg.addColorStop(Math.min(1, tail / (Math.PI * 2) + 0.001), `rgba(${CYAN}, 0)`);
+      ctx.strokeStyle = tg;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(this.cx, this.cy, dist, ang - tail, ang);
+      ctx.stroke();
+    }
+
     // 連到核心的光線
-    const lx = this.cx + Math.cos(n.angle) * this.coreR * 1.15;
-    const ly = this.cy + Math.sin(n.angle) * this.coreR * 1.15;
-    const ex = x - Math.cos(n.angle) * r;
-    const ey = y - Math.sin(n.angle) * r;
+    const lx = this.cx + Math.cos(ang) * this.coreR * 1.15;
+    const ly = this.cy + Math.sin(ang) * this.coreR * 1.15;
+    const ex = x - Math.cos(ang) * r;
+    const ey = y - Math.sin(ang) * r;
     const lg = ctx.createLinearGradient(lx, ly, ex, ey);
     lg.addColorStop(0, `rgba(${CYAN}, 0.05)`);
     lg.addColorStop(1, `rgba(${rgb}, ${0.35 + n.hover * 0.4})`);
@@ -440,7 +457,7 @@ export class HexMenu {
   // ---- 分組標籤（沿著外圈） ----
   private drawGroupLabels(ctx: CanvasRenderingContext2D, t: number) {
     let a = 0;
-    if (this.state === 'opening') a = clamp01((t - this.t0 - 1300) / 500);
+    if (this.state === 'opening') a = clamp01((t - this.t0 - 4400) / 800);
     else if (this.state === 'open') a = 1;
     else if (this.state === 'closing') a = 1 - clamp01((t - this.t0) / 300);
     if (a <= 0) return;
