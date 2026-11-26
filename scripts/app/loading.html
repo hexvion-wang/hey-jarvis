@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>H.E.X. · 啟動中</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #02080d; color: #00e5ff; font-family: ui-monospace, Consolas, monospace; overflow: hidden; }
+  .wrap { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; }
+  svg { width: 140px; height: 140px; filter: drop-shadow(0 0 18px rgba(0, 229, 255, 0.6)); }
+  .spin { transform-origin: 50% 50%; animation: spin 3s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  h1 { margin: 0; font-size: 28px; letter-spacing: 0.6em; font-weight: 600; padding-left: 0.6em; }
+  p { margin: 0; font: 14px 'Microsoft JhengHei', system-ui, sans-serif; color: rgba(0, 229, 255, 0.65); letter-spacing: 0.1em; }
+  .err { color: #ffc940; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg viewBox="0 0 100 100">
+    <polygon points="50,8 86,29 86,71 50,92 14,71 14,29" fill="none" stroke="#00e5ff" stroke-width="3" />
+    <g class="spin"><circle cx="50" cy="50" r="24" fill="none" stroke="#00e5ff" stroke-width="2" stroke-dasharray="10 6" /></g>
+    <circle cx="50" cy="50" r="9" fill="#00e5ff" />
+  </svg>
+  <h1>H.E.X.</h1>
+  <p id="msg">系統啟動中…</p>
+</div>
+<script>
+  // 等本機 agent 準備好，就切換到 HEX
+  const msg = document.getElementById('msg');
+  const steps = ['系統啟動中…', '載入 AI 核心…', '連接本機服務…'];
+  let n = 0;
+  const t0 = Date.now();
+  // 本機檔案不能用 fetch 問 agent，改用「載入 agent 上的圖示」來判斷它好了沒
+  function check() {
+    const img = new Image();
+    img.onload = () => location.replace('http://localhost:4000/hex.html');
+    img.onerror = retry;
+    img.src = 'http://127.0.0.1:4000/hex-icon.png?t=' + Date.now();
+  }
+  function retry() {
+    n++;
+    if (Date.now() - t0 > 60000) {
+      msg.textContent = '啟動失敗：請改用「啟動Jarvis.cmd」看看錯誤訊息';
+      msg.className = 'err';
+      return;
+    }
+    msg.textContent = steps[Math.floor(n / 4) % steps.length];
+    setTimeout(check, 500);
+  }
+  check();
+</script>
+</body>
+</html>
