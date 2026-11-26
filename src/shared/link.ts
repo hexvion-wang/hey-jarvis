@@ -4,7 +4,7 @@
  * - 電腦輸入配對碼後連過去
  * 只有配對時經過 PeerJS 的公開伺服器，之後訊息是兩台裝置直接傳。
  */
-import Peer, { type DataConnection } from 'peerjs';
+import Peer, { type DataConnection, type MediaConnection } from 'peerjs';
 
 export type LinkMsg =
   | { type: 'wake'; text?: string } // 電腦被叫醒
@@ -12,7 +12,8 @@ export type LinkMsg =
   | { type: 'status'; headline: string; sub?: string } // 電腦畫面上的訊息（指令結果等）
   | { type: 'core' } // 手機捏了中間的核心 → 請電腦醒來
   | { type: 'hand'; ok: boolean; x: number; y: number } // 手的位置（0~1，已鏡像）
-  | { type: 'pinch'; down: boolean }; // 捏下 / 放開
+  | { type: 'pinch'; down: boolean } // 捏下 / 放開
+  | { type: 'video'; on: boolean }; // 電腦請手機開始／停止傳鏡頭畫面
 
 export type LinkState = 'idle' | 'waiting' | 'connecting' | 'connected' | 'error';
 
@@ -22,6 +23,8 @@ const CODE_KEY = 'jarvis-link-code';
 export interface LinkHandlers {
   onMessage(msg: LinkMsg): void;
   onState(state: LinkState, detail?: string): void;
+  /** 電腦端：收到手機的鏡頭畫面（null = 畫面停了） */
+  onStream?(stream: MediaStream | null): void;
 }
 
 abstract class LinkBase {
@@ -50,6 +53,22 @@ abstract class LinkBase {
   }
 
   protected abstract onClosed(): void;
+
+  // ---- 鏡頭畫面（WebRTC 影像通話） ----
+  protected media: MediaConnection | null = null;
+
+  /** 手機端：把鏡頭畫面傳給目前連線的電腦 */
+  startVideo(stream: MediaStream) {
+    if (!this.peer || !this.conn?.open || this.media) return;
+    this.media = this.peer.call(this.conn.peer, stream);
+    this.media.on('close', () => (this.media = null));
+    this.media.on('error', () => (this.media = null));
+  }
+
+  stopVideo() {
+    this.media?.close();
+    this.media = null;
+  }
 }
 
 /** iPhone 端：產生（或沿用）配對碼，等電腦連進來 */
@@ -75,6 +94,7 @@ export class PhoneLink extends LinkBase {
   }
 
   protected onClosed() {
+    this.stopVideo();
     this.h.onState('waiting');
   }
 }
@@ -97,6 +117,17 @@ export class DeskLink extends LinkBase {
     if (!this.peer || this.peer.destroyed) {
       this.peer = new Peer();
       this.peer.on('disconnected', () => this.peer?.reconnect());
+      // 手機打影像通話過來：接起來（電腦不傳任何畫面），把畫面交給 HEX
+      this.peer.on('call', (call) => {
+        this.media?.close();
+        this.media = call;
+        call.answer();
+        call.on('stream', (s) => this.h.onStream?.(s));
+        call.on('close', () => {
+          if (this.media === call) this.media = null;
+          this.h.onStream?.(null);
+        });
+      });
       this.peer.on('error', (e) => {
         if (e.type === 'peer-unavailable') {
           this.h.onState('error', '找不到這支手機：確認手機上的 Jarvis 已經啟動、配對碼正確');
@@ -118,6 +149,8 @@ export class DeskLink extends LinkBase {
   }
 
   protected onClosed() {
+    this.stopVideo();
+    this.h.onStream?.(null);
     this.h.onState('connecting', '手機斷線，重新連線中…');
     this.scheduleRetry();
   }

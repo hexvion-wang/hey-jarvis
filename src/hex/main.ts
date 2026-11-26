@@ -183,6 +183,11 @@ export function pressAt(x: number, y: number, fromGesture = false) {
   lastActivity = t;
   // 手勢點到面板：按鈕就執行，其他地方開始拖曳（滑鼠由面板自己處理）
   if (fromGesture && panels.pressAt(x, y)) return;
+  // 手勢點到畫面上的按鈕（例如 AR 鏡頭開關）
+  if (fromGesture) {
+    const btn = document.elementFromPoint(x, y)?.closest('[data-hex-action]') as HTMLElement | null;
+    if (btn) return btn.click();
+  }
   // 點核心：待機 → 主控台 → 全息；全息時點核心回到主控台
   if (stage === 'standby' && menu.hitCore(x, y)) return goStage('console');
   if (stage === 'console' && hexConsole.hitCore(x, y)) return goStage('holo');
@@ -194,6 +199,41 @@ export function pressAt(x: number, y: number, fromGesture = false) {
 
 // ---- iPhone 手勢控制 ----
 const GAIN = 1.5; // 手在鏡頭中間一小塊範圍移動，就能涵蓋整個螢幕
+
+/** 一般模式：以畫面中心放大，手不用伸太遠 */
+function gainMap(x: number, y: number) {
+  const c = (v: number) => Math.min(1, Math.max(0, 0.5 + (v - 0.5) * GAIN));
+  return { x: c(x) * W, y: c(y) * H };
+}
+
+// ---- AR 鏡頭背景 ----
+const bgVideo = $('bg') as HTMLVideoElement;
+let arOn = false;
+const arLive = () => document.body.classList.contains('ar-live') && bgVideo.videoWidth > 0;
+
+/** AR 模式：游標對準背景畫面裡的手（背景是 object-fit: cover，要扣掉被裁掉的部分） */
+function arMap(x: number, y: number) {
+  const vw = bgVideo.videoWidth;
+  const vh = bgVideo.videoHeight;
+  const s = Math.max(W / vw, H / vh);
+  const dw = vw * s;
+  const dh = vh * s;
+  return { x: (W - dw) / 2 + x * dw, y: (H - dh) / 2 + y * dh };
+}
+
+function toggleAR() {
+  if (!link.connected) return toast('先在右下角連上 iPhone，才能開 AR 鏡頭', 3500);
+  arOn = !arOn;
+  link.send({ type: 'video', on: arOn });
+  $('arBtn').classList.toggle('on', arOn);
+  if (!arOn) {
+    bgVideo.srcObject = null;
+    document.body.classList.remove('ar-live');
+    menu.gridScale = 1;
+  }
+  toast(arOn ? 'AR 鏡頭開啟中…' : 'AR 鏡頭已關閉');
+}
+$('arBtn').addEventListener('click', toggleAR);
 const fx = new OneEuro(1.2, 0.006);
 const fy = new OneEuro(1.2, 0.006);
 let handT = 0; // 最後一次收到手的位置
@@ -203,7 +243,15 @@ const linkStateEl = $('linkState');
 const linkCodeEl = $('linkCode') as HTMLInputElement;
 
 const link = new DeskLink({
+  onStream(stream) {
+    bgVideo.srcObject = stream;
+    document.body.classList.toggle('ar-live', !!stream);
+    menu.gridScale = stream ? 0.25 : 1;
+    if (stream) bgVideo.play().catch(() => {});
+  },
   onState(state, detail) {
+    // 重新連上時，如果 AR 是開著的，再請手機傳一次畫面
+    if (state === 'connected' && arOn) link.send({ type: 'video', on: true });
     linkStateEl.className = state;
     linkStateEl.textContent =
       state === 'connected' ? 'iPhone ✓' : state === 'connecting' ? '連線中…' : state === 'error' ? `✗ ${detail ?? ''}` : '未連線';
@@ -216,8 +264,8 @@ const link = new DeskLink({
         fy.reset();
         return;
       }
-      const clamp = (v: number) => Math.min(1, Math.max(0, 0.5 + (v - 0.5) * GAIN));
-      cursor = { x: fx.filter(clamp(msg.x) * W, t), y: fy.filter(clamp(msg.y) * H, t) };
+      const p = arLive() ? arMap(msg.x, msg.y) : gainMap(msg.x, msg.y);
+      cursor = { x: fx.filter(p.x, t), y: fy.filter(p.y, t) };
       cursorFromHand = true;
       handT = t;
       lastActivity = t;
@@ -282,13 +330,15 @@ window.addEventListener('pointerleave', () => {
   if (!cursorFromHand) cursor = null;
 });
 window.addEventListener('pointerdown', (e) => {
-  if ((e.target as HTMLElement).closest('#linkBox, .hpanel')) return;
+  if ((e.target as HTMLElement).closest('#linkBox, .hpanel, [data-hex-action]')) return;
   pressAt(e.clientX, e.clientY);
 });
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Space') {
     e.preventDefault();
     stepStage(1);
+  } else if (e.code === 'KeyV') {
+    toggleAR();
   } else if (e.code === 'Escape') {
     stepStage(-1);
   }

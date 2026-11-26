@@ -213,6 +213,16 @@ const link = new PhoneLink({
       showBanner(msg.text ? `電腦聽到：「${msg.text}」` : 'J.A.R.V.I.S. ONLINE');
     } else if (msg.type === 'standby') {
       showBanner('STANDBY · 回到待命', 2500);
+    } else if (msg.type === 'video') {
+      // 電腦開啟 AR 背景：把鏡頭畫面傳過去（同一路鏡頭，手勢辨識照常進行）
+      const stream = video.srcObject as MediaStream | null;
+      if (msg.on && stream) {
+        link.startVideo(stream);
+        showBanner('AR 鏡頭畫面傳送中', 2500);
+      } else {
+        link.stopVideo();
+        if (!msg.on) showBanner('AR 鏡頭已關閉', 2000);
+      }
     } else if (msg.type === 'status') {
       showBanner(msg.sub ? `${msg.headline}\n${msg.sub}` : msg.headline, 6000);
     }

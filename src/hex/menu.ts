@@ -68,6 +68,8 @@ export class HexMenu {
   private core = { x: 0, y: 0, r: 40 };
   /** 收回時的 Dock 程度（從 Dock 收回走不同路線） */
   private closeFromDock = 0;
+  /** 背景格線濃度倍率（AR 鏡頭背景時調淡） */
+  gridScale = 1;
 
   constructor() {
     // 13 個程式 + 4 個分組間隔，平均分配一整圈
@@ -311,7 +313,7 @@ export class HexMenu {
       this.grid = g;
     }
     ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = alpha * this.gridScale;
     ctx.drawImage(this.grid, 0, 0, this.W, this.H);
     ctx.restore();
   }
