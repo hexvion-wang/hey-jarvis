@@ -45,10 +45,10 @@ const buttons: HudButton[] = [
     document.body.classList.toggle('alert', theme.alert);
   }),
   makeButton('reset', 'RESET', '重設計數', 0.24, 0.2, () => {
-    hits = 0;
-    attempts = -1; // 這次點擊本身不算
+    resetPending = true; // 在 press() 結束時歸零，這次點擊本身不算
   }),
 ];
+let resetPending = false;
 
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -76,15 +76,31 @@ function updateScore() {
   clicksEl.textContent = `HIT ${hits}/${attempts}`;
 }
 
-function press(x: number, y: number, t: number) {
+// 最近一次游標停在哪個按鈕上（按鈕發亮）
+let lastHover: { b: HudButton; t: number } | null = null;
+const HOVER_GRACE_MS = 400;
+
+/**
+ * 點擊判定。手勢點擊時（fromGesture）捏的動作會讓游標往下飄，
+ * 所以只要捏下前 0.4 秒內游標停過某個按鈕，就算點到它。
+ */
+function press(x: number, y: number, t: number, fromGesture = false) {
   attempts++;
-  const b = hitTest(buttons, x, y);
+  let b = hitTest(buttons, x, y);
+  if (!b && fromGesture && lastHover && t - lastHover.t <= HOVER_GRACE_MS) b = lastHover.b;
   if (b) {
     hits++;
     b.pressT = t;
     b.onPress(t);
+    addRipple(b.x, b.y, t, true);
+  } else {
+    addRipple(x, y, t, false);
   }
-  addRipple(x, y, t, !!b);
+  if (resetPending) {
+    resetPending = false;
+    hits = 0;
+    attempts = 0;
+  }
   updateScore();
 }
 
@@ -110,7 +126,7 @@ function loop() {
     handsEl.textContent = `HANDS ${result.landmarks.length}`;
 
     const g = gestures.update(vp, result.landmarks[0], now);
-    if (g.pinchStart && g.clickPos) press(g.clickPos.x, g.clickPos.y, now);
+    if (g.pinchStart && g.clickPos) press(g.clickPos.x, g.clickPos.y, now, true);
     gestureEl.textContent = g.hasHand ? `${g.pinching ? 'PINCH' : 'POINT'} ${g.ratio.toFixed(2)}` : 'NO HAND';
     gestureEl.classList.toggle('pinch', g.pinching);
 
@@ -127,7 +143,9 @@ function loop() {
   const g = gestures.state;
   ctx.clearRect(0, 0, vp.screenW, vp.screenH);
   drawBackdrop(ctx, vp.screenW, vp.screenH, now);
-  drawButtons(ctx, buttons, g.hasHand ? g.cursor : null, dt, now);
+  const hovered = drawButtons(ctx, buttons, g.hasHand ? g.cursor : null, dt, now);
+  // 只記錄「還沒捏」時停留的按鈕，捏住後游標飄走不影響判定
+  if (hovered && !g.pinching) lastHover = { b: hovered, t: now };
   if (showSkeleton && result) for (const hand of result.landmarks) drawHand(ctx, vp, hand);
   drawEffects(ctx, vp.screenW, vp.screenH, now);
   drawCursor(ctx, g, now);
