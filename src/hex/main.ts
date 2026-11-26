@@ -148,6 +148,7 @@ async function refreshDaily() {
 async function launch(app: AppDef) {
   lastActivity = performance.now();
   menu.flash(app.id, performance.now());
+  if (app.kind === 'panel') return toast(`「${app.name}」面板下一步就會做好`);
   link.send({ type: 'status', headline: `啟動 ${app.name}` });
   if (!agentOk) return toast(`${app.name}：要從本機 agent 開啟（雙擊 啟動Jarvis.cmd）`, 4000);
   toast(`啟動 ${app.name}…`);

@@ -1,8 +1,8 @@
 /**
- * HEX 環狀選單：待機核心 → 展開動畫 → 程式節點環繞四周 → 收回。
+ * HEX 全息選單：待機核心 → 螺旋展開成環 → 收成底部 Dock → 收回。
  * 純 Canvas 繪製，時間單位都是 performance.now() 的毫秒。
  */
-import { APPS, GROUPS, type AppDef, type GroupId } from './apps';
+import { APPS, GROUPS, PANELS, type AppDef, type GroupId } from './apps';
 
 const CYAN = '0, 229, 255';
 const GOLD = '255, 201, 64';
@@ -12,16 +12,28 @@ export const CLOSE_MS = 1000;
 const FLY_MS = 1500;
 /** 節點飛出時繞的角度（約 0.6 圈） */
 const SPIN = Math.PI * 1.25;
+/** 環狀展開完成後，停多久開始收成 Dock */
+const DOCK_DELAY = 500;
+/** 收成 Dock 的轉場時間 */
+const DOCK_MS = 1400;
 
 type State = 'standby' | 'opening' | 'open' | 'closing';
 
 interface Node {
   app: AppDef;
+  /** 面板按鈕只出現在 Dock，不參加環狀展開 */
+  panel: boolean;
   angle: number;
+  /** 環上的位置 */
   x: number;
   y: number;
+  /** Dock 上的位置 */
+  dx: number;
+  dy: number;
   /** 展開時開始飛出的時間（相對 open 開始） */
   delay: number;
+  /** 收成 Dock 時的出發順序 0~1 */
+  dockOrder: number;
   hover: number;
   flashT: number;
   available: boolean;
@@ -30,6 +42,7 @@ interface Node {
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const easeOut = (x: number) => 1 - Math.pow(1 - clamp01(x), 3);
 const easeInOut = (x: number) => 0.5 - 0.5 * Math.cos(Math.PI * clamp01(x));
+const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
 export class HexMenu {
   state: State = 'standby';
@@ -41,11 +54,20 @@ export class HexMenu {
   private cy = 0;
   /** 程式環半徑 */
   private R = 100;
-  /** 節點半徑 */
+  /** 環上節點半徑 */
   private r = 40;
-  /** 核心半徑 */
+  /** 待機核心半徑 */
   coreR = 40;
   private grid: HTMLCanvasElement | null = null;
+  /** Dock 上節點半徑、核心在 Dock 的位置、Dock 弧線參數 */
+  private rd = 26;
+  private dockCore = { x: 0, y: 0 };
+  private dockSag = 40;
+  private dockSpan = 100;
+  /** 核心目前的位置與大小（會從中間移到 Dock） */
+  private core = { x: 0, y: 0, r: 40 };
+  /** 收回時的 Dock 程度（從 Dock 收回走不同路線） */
+  private closeFromDock = 0;
 
   constructor() {
     // 13 個程式 + 4 個分組間隔，平均分配一整圈
@@ -58,10 +80,14 @@ export class HexMenu {
       for (const app of APPS.filter((a) => a.group === g.id)) {
         this.nodes.push({
           app,
+          panel: false,
           angle: -Math.PI / 2 + (slot + 0.5) * step,
           x: 0,
           y: 0,
+          dx: 0,
+          dy: 0,
           delay: 1300 + order * 160,
+          dockOrder: order / (APPS.length - 1),
           hover: 0,
           flashT: -1e9,
           available: true,
@@ -71,10 +97,26 @@ export class HexMenu {
       }
       slot++; // 分組間隔
     }
+    for (const app of PANELS) {
+      this.nodes.push({
+        app,
+        panel: true,
+        angle: 0,
+        x: 0,
+        y: 0,
+        dx: 0,
+        dy: 0,
+        delay: 0,
+        dockOrder: 1,
+        hover: 0,
+        flashT: -1e9,
+        available: true,
+      });
+    }
   }
 
   setAvailable(ids: Set<string> | null) {
-    for (const n of this.nodes) n.available = !ids || ids.has(n.app.id);
+    for (const n of this.nodes) n.available = n.panel || !ids || ids.has(n.app.id);
   }
 
   layout(W: number, H: number) {
@@ -90,7 +132,38 @@ export class HexMenu {
       n.x = this.cx + Math.cos(n.angle) * this.R;
       n.y = this.cy + Math.sin(n.angle) * this.R;
     }
+    this.layoutDock();
+    this.core = { x: this.cx, y: this.cy, r: this.coreR };
     this.grid = null; // 重畫背景格線
+  }
+
+  /**
+   * Dock：螢幕底部一條微彎的弧（中間低、兩側高），HEX 核心在正中間，左右各 8 個。
+   * 左：面板按鈕｜工作｜檔案總管　　右：文書｜終端機｜娛樂
+   */
+  private layoutDock() {
+    const by = (...ids: string[]) => ids.map((id) => this.nodes.find((n) => n.app.id === id)!).filter(Boolean);
+    const order: (Node | 'core')[] = [
+      ...this.nodes.filter((n) => n.panel),
+      ...by('obsidian', 'chrome', 'claude', 'chatgpt', 'explorer'),
+      'core',
+      ...by('word', 'excel', 'powerpoint', 'terminal', 'discord', 'steam', 'lol', 'wuwa'),
+    ];
+    this.dockSpan = Math.min(this.W * 0.9, order.length * 110);
+    this.rd = Math.max(20, Math.min(36, (this.dockSpan / order.length) * 0.36));
+    this.dockSag = Math.min(60, this.H * 0.06);
+    // 底部留給角落文字與 iPhone 配對欄
+    const baseY = this.H - this.rd - 112;
+    order.forEach((item, i) => {
+      const u = (i / (order.length - 1)) * 2 - 1;
+      const x = this.cx + (u * this.dockSpan) / 2;
+      const y = baseY - this.dockSag * u * u;
+      if (item === 'core') this.dockCore = { x, y };
+      else {
+        item.dx = x;
+        item.dy = y;
+      }
+    });
   }
 
   open(t: number) {
@@ -101,6 +174,7 @@ export class HexMenu {
 
   close(t: number) {
     if (this.state === 'standby' || this.state === 'closing') return;
+    this.closeFromDock = this.dockAmount(t);
     this.state = 'closing';
     this.t0 = t;
   }
@@ -109,16 +183,28 @@ export class HexMenu {
     return this.state === 'open' || this.state === 'opening';
   }
 
-  hitCore(x: number, y: number) {
-    return Math.hypot(x - this.cx, y - this.cy) <= this.coreR * 1.3;
+  /** 0~1：從環狀收成 Dock 的進度（收回中則是收回開始時的值） */
+  dockAmount(t: number) {
+    if (this.state === 'closing') return this.closeFromDock;
+    if (!this.isOpen) return 0;
+    return clamp01((t - this.t0 - OPEN_MS - DOCK_DELAY) / DOCK_MS);
   }
 
-  /** 只有展開完成、節點已經就位時才能點 */
+  hitCore(x: number, y: number) {
+    return Math.hypot(x - this.core.x, y - this.core.y) <= this.core.r * 1.3;
+  }
+
+  /** 只有節點已經就位時才能點（環狀或 Dock 都可以，轉場中不行） */
   hitNode(x: number, y: number, t: number): AppDef | null {
     if (!this.isOpen) return null;
+    const d = this.dockAmount(t);
+    if (d > 0 && d < 1) return null;
     for (const n of this.nodes) {
-      if (this.nodeProgress(n, t) < 0.9) continue;
-      if (Math.hypot(x - n.x, y - n.y) <= this.r * 1.25) return n.app;
+      if (d >= 1) {
+        if (Math.hypot(x - n.dx, y - n.dy) <= this.rd * 1.3) return n.app;
+      } else if (!n.panel && this.nodeProgress(n, t) >= 0.9) {
+        if (Math.hypot(x - n.x, y - n.y) <= this.r * 1.25) return n.app;
+      }
     }
     return null;
   }
@@ -128,7 +214,7 @@ export class HexMenu {
     if (n) n.flashT = t;
   }
 
-  /** 節點從中心飛到定位的進度 0~1 */
+  /** 節點從中心飛到定位的進度 0~1（收回時從 1 降到 0） */
   private nodeProgress(n: Node, t: number) {
     const e = t - this.t0;
     if (this.state === 'standby') return 0;
@@ -158,14 +244,27 @@ export class HexMenu {
     if (this.state === 'closing' && e > CLOSE_MS) this.state = 'standby';
 
     const open = this.openness(t);
+    const dockRaw = this.dockAmount(t);
+    const dock = easeInOut(dockRaw);
+    // 收回時：Dock 程度隨收回進度一起降到 0（核心回到中間）
+    const coreDock = this.state === 'closing' ? dock * open : dock;
+
     this.drawGrid(ctx, 0.25 + open * 0.75);
-    this.drawRings(ctx, t, open);
+    this.drawRings(ctx, t, open * (1 - dock));
     if (this.state === 'opening') this.drawShockwave(ctx, e);
+    if (dock > 0) this.drawDockBase(ctx, this.state === 'closing' ? dock * open : dock);
+
+    this.core = {
+      x: lerp(this.cx, this.dockCore.x, coreDock),
+      y: lerp(this.cy, this.dockCore.y, coreDock),
+      r: lerp(this.coreR, this.rd * 1.2, coreDock),
+    };
     if (opts.core !== false) this.drawCore(ctx, t, open);
 
     const hovered = cursor ? this.hitNode(cursor.x, cursor.y, t) : null;
-    for (const n of this.nodes) this.drawNode(ctx, n, t, dt, n.app === hovered);
-    this.drawGroupLabels(ctx, t);
+    for (const n of this.nodes) this.drawNode(ctx, n, t, dt, n.app === hovered, dockRaw, open);
+    this.drawGroupLabels(ctx, t, dock);
+    if (hovered && dockRaw >= 1) this.drawDockLabel(ctx, hovered);
     return hovered;
   }
 
@@ -211,17 +310,16 @@ export class HexMenu {
     ctx.restore();
   }
 
-  // ---- 核心 ----
+  // ---- 核心（位置與大小跟著 this.core 走） ----
   private drawCore(ctx: CanvasRenderingContext2D, t: number, open: number) {
-    const { cx, cy } = this;
-    const R = this.coreR;
+    const { x: cx, y: cy, r: R } = this.core;
     const power = 0.3 + open * 0.7;
     ctx.save();
     ctx.shadowColor = `rgb(${CYAN})`;
     ctx.shadowBlur = 10 + open * 25;
 
     // 外圈三段旋轉弧
-    ctx.lineWidth = 3;
+    ctx.lineWidth = Math.max(2, R * 0.07);
     ctx.strokeStyle = `rgba(${CYAN}, ${0.35 + power * 0.5})`;
     for (let i = 0; i < 3; i++) {
       const a = t * (0.0004 + open * 0.0008) + (i * Math.PI * 2) / 3;
@@ -257,11 +355,10 @@ export class HexMenu {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // 文字
     // 深色字壓在發亮的核心上比較清楚
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#00303d';
-    ctx.font = `800 ${Math.round(R * 0.26)}px ui-monospace, Consolas, monospace`;
+    ctx.font = `800 ${Math.max(9, Math.round(R * 0.26))}px ui-monospace, Consolas, monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('HEX', cx, cy + 1);
@@ -300,9 +397,10 @@ export class HexMenu {
 
   // ---- 程式環與刻度 ----
   private drawRings(ctx: CanvasRenderingContext2D, t: number, open: number) {
-    if (open <= 0) return;
+    if (open <= 0.01) return;
     const { cx, cy, R } = this;
     ctx.save();
+    ctx.globalAlpha = Math.min(1, open * 1.5);
     ctx.shadowColor = `rgb(${CYAN})`;
     ctx.shadowBlur = 8;
 
@@ -353,27 +451,95 @@ export class HexMenu {
     ctx.restore();
   }
 
+  // ---- Dock 底座：一條從中間往兩側畫出去的發光弧線 ----
+  private drawDockBase(ctx: CanvasRenderingContext2D, k: number) {
+    if (k <= 0) return;
+    const half = this.dockSpan / 2 + this.rd * 1.6;
+    const reach = half * easeOut(k);
+    const baseY = this.dockCore.y + this.rd + 16;
+    const yAt = (x: number) => {
+      const u = (x - this.cx) / (this.dockSpan / 2);
+      return baseY - this.dockSag * u * u;
+    };
+    ctx.save();
+    ctx.globalAlpha = easeOut(k);
+    ctx.shadowColor = `rgb(${CYAN})`;
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = `rgba(${CYAN}, 0.5)`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i <= 80; i++) {
+      const x = this.cx - reach + (reach * 2 * i) / 80;
+      if (i) ctx.lineTo(x, yAt(x));
+      else ctx.moveTo(x, yAt(x));
+    }
+    ctx.stroke();
+    // 兩端與中央的小方塊
+    ctx.fillStyle = `rgb(${GOLD})`;
+    for (const x of [this.cx - reach, this.cx + reach]) ctx.fillRect(x - 3, yAt(x) - 3, 6, 6);
+    ctx.restore();
+  }
+
   // ---- 程式節點 ----
-  private drawNode(ctx: CanvasRenderingContext2D, n: Node, t: number, dt: number, hovered: boolean) {
-    const p = this.nodeProgress(n, t);
+  private drawNode(
+    ctx: CanvasRenderingContext2D,
+    n: Node,
+    t: number,
+    dt: number,
+    hovered: boolean,
+    dockRaw: number,
+    open: number,
+  ) {
+    const closingDock = this.state === 'closing' && dockRaw > 0;
+    // 每個節點收成 Dock 的進度，依順序稍微錯開出發
+    const k = n.panel ? easeOut(dockRaw) : easeInOut((dockRaw - n.dockOrder * 0.3) / 0.7);
+    const p = closingDock ? open : n.panel ? dockRaw : this.nodeProgress(n, t);
     if (p <= 0) return;
-    // 螺旋飛行：一邊往外飛、一邊旋轉，越接近定位轉得越慢
-    const dist = this.R * easeOut(p);
-    const ang = n.angle - (1 - easeInOut(p)) * SPIN;
-    const x = this.cx + Math.cos(ang) * dist;
-    const y = this.cy + Math.sin(ang) * dist;
-    const moving = p < 1;
+
+    let x: number;
+    let y: number;
+    let ang = n.angle;
+    let baseR: number;
+    let moving = false;
+    if (closingDock) {
+      // 從 Dock 收回：所有節點往核心縮回去
+      const kk = easeOut(p);
+      x = lerp(this.core.x, n.dx, kk);
+      y = lerp(this.core.y, n.dy, kk);
+      baseR = this.rd * (0.4 + 0.6 * p);
+    } else if (n.panel) {
+      // 面板按鈕：在 Dock 位置由下往上浮出
+      x = n.dx;
+      y = n.dy + (1 - k) * 50;
+      baseR = this.rd;
+    } else {
+      // 螺旋飛行：一邊往外飛、一邊旋轉，越接近定位轉得越慢
+      const dist = this.R * easeOut(p);
+      ang = n.angle - (1 - easeInOut(p)) * SPIN;
+      const rx = this.cx + Math.cos(ang) * dist;
+      const ry = this.cy + Math.sin(ang) * dist;
+      // 收成 Dock：從環上滑到 Dock 位置
+      x = lerp(rx, n.dx, k);
+      y = lerp(ry, n.dy, k);
+      const ringR = this.r * (0.4 + 0.6 * Math.min(1, p * 1.4));
+      baseR = lerp(ringR, this.rd, k);
+      moving = p < 1 && dockRaw === 0;
+    }
 
     n.hover += ((hovered ? 1 : 0) - n.hover) * Math.min(1, dt / 90);
     const flash = clamp01(1 - (t - n.flashT) / 700);
-    const r = this.r * (0.4 + 0.6 * Math.min(1, p * 1.4)) * (1 + n.hover * 0.15 + flash * 0.1);
-    const rgb = n.hover > 0.5 || flash > 0 ? GOLD : CYAN;
+    const r = baseR * (1 + n.hover * 0.18 + flash * 0.1);
+    const idle = n.panel ? GOLD : CYAN;
+    const rgb = n.hover > 0.5 || flash > 0 ? (n.panel ? CYAN : GOLD) : idle;
     const dim = n.available ? 1 : 0.35;
+    const alpha = Math.min(1, p * 1.5) * dim;
+    const lineA = closingDock || n.panel ? 0 : 1 - Math.min(1, dockRaw * 3);
 
     ctx.save();
-    ctx.globalAlpha = Math.min(1, p * 1.5) * dim;
+    ctx.globalAlpha = alpha;
 
     // 飛行中的軌跡尾巴（沿著目前半徑的一小段弧）
+    const dist = Math.hypot(x - this.cx, y - this.cy);
     if (moving && dist > this.coreR) {
       const tail = 0.5 * (1 - p) + 0.1;
       const tg = ctx.createConicGradient(ang - tail, this.cx, this.cy);
@@ -387,20 +553,24 @@ export class HexMenu {
       ctx.stroke();
     }
 
-    // 連到核心的光線
-    const lx = this.cx + Math.cos(ang) * this.coreR * 1.15;
-    const ly = this.cy + Math.sin(ang) * this.coreR * 1.15;
-    const ex = x - Math.cos(ang) * r;
-    const ey = y - Math.sin(ang) * r;
-    const lg = ctx.createLinearGradient(lx, ly, ex, ey);
-    lg.addColorStop(0, `rgba(${CYAN}, 0.05)`);
-    lg.addColorStop(1, `rgba(${rgb}, ${0.35 + n.hover * 0.4})`);
-    ctx.strokeStyle = lg;
-    ctx.lineWidth = 1 + n.hover;
-    ctx.beginPath();
-    ctx.moveTo(lx, ly);
-    ctx.lineTo(ex, ey);
-    ctx.stroke();
+    // 連到核心的光線（收成 Dock 時淡出）
+    if (lineA > 0.02) {
+      ctx.globalAlpha = alpha * lineA;
+      const lx = this.cx + Math.cos(ang) * this.coreR * 1.15;
+      const ly = this.cy + Math.sin(ang) * this.coreR * 1.15;
+      const ex = x - Math.cos(ang) * r;
+      const ey = y - Math.sin(ang) * r;
+      const lg = ctx.createLinearGradient(lx, ly, ex, ey);
+      lg.addColorStop(0, `rgba(${CYAN}, 0.05)`);
+      lg.addColorStop(1, `rgba(${rgb}, ${0.35 + n.hover * 0.4})`);
+      ctx.strokeStyle = lg;
+      ctx.lineWidth = 1 + n.hover;
+      ctx.beginPath();
+      ctx.moveTo(lx, ly);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+    }
 
     // 節點本體
     ctx.shadowColor = `rgb(${rgb})`;
@@ -418,15 +588,15 @@ export class HexMenu {
 
     // hover：外圈旋轉弧
     if (n.hover > 0.05) {
-      ctx.globalAlpha *= n.hover;
+      ctx.globalAlpha = alpha * n.hover;
       ctx.lineWidth = 2;
       for (let i = 0; i < 3; i++) {
         const a = t / 400 + (i * Math.PI * 2) / 3;
         ctx.beginPath();
-        ctx.arc(x, y, r + 9, a, a + 1.1);
+        ctx.arc(x, y, r + 7, a, a + 1.1);
         ctx.stroke();
       }
-      ctx.globalAlpha = Math.min(1, p * 1.5) * dim;
+      ctx.globalAlpha = alpha;
     }
 
     // 開啟時的發射光環
@@ -438,18 +608,21 @@ export class HexMenu {
       ctx.stroke();
     }
 
-    // 縮寫與名稱
+    // 縮寫
     ctx.shadowBlur = 6;
     ctx.fillStyle = `rgb(${rgb})`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const glyph = n.app.glyph;
-    ctx.font = `700 ${Math.round(r * (glyph.length > 2 ? 0.42 : 0.55))}px ui-monospace, Consolas, monospace`;
+    const cjk = /[^\x00-\x7f]/.test(glyph);
+    ctx.font = `700 ${Math.round(r * (cjk ? 0.6 : glyph.length > 2 ? 0.42 : 0.55))}px ${cjk ? "'Microsoft JhengHei', sans-serif" : 'ui-monospace, Consolas, monospace'}`;
     ctx.fillText(glyph, x, y + 1);
-    if (p > 0.85) {
+
+    // 環狀時名稱放在節點外側；Dock 時改由 drawDockLabel 只顯示游標所在的那個
+    const ringLabel = 1 - Math.min(1, dockRaw * 2.5);
+    if (!n.panel && !closingDock && p > 0.85 && ringLabel > 0) {
       ctx.font = `${Math.round(12 + n.hover * 4)}px 'Microsoft JhengHei', 'PingFang TC', system-ui, sans-serif`;
-      ctx.globalAlpha *= 0.75 + n.hover * 0.25;
-      // 名稱放在節點外側（沿著核心→節點的方向往外）
+      ctx.globalAlpha = alpha * (0.75 + n.hover * 0.25) * ringLabel;
       const c = Math.cos(n.angle);
       const s = Math.sin(n.angle);
       const gap = r + 12;
@@ -460,12 +633,37 @@ export class HexMenu {
     ctx.restore();
   }
 
-  // ---- 分組標籤（沿著外圈） ----
-  private drawGroupLabels(ctx: CanvasRenderingContext2D, t: number) {
+  /** Dock 上游標停留的那個：名稱標籤顯示在圖示上方 */
+  private drawDockLabel(ctx: CanvasRenderingContext2D, app: AppDef) {
+    const n = this.nodes.find((n) => n.app === app);
+    if (!n) return;
+    const text = app.kind === 'panel' ? `${app.name}（面板）` : app.name;
+    ctx.save();
+    ctx.font = `600 14px 'Microsoft JhengHei', 'PingFang TC', system-ui, sans-serif`;
+    const w = ctx.measureText(text).width + 20;
+    // 靠近螢幕邊緣時往內縮，不要被切掉
+    const x = Math.min(this.W - w / 2 - 8, Math.max(w / 2 + 8, n.dx));
+    const y = n.dy - this.rd * 1.2 - 26;
+    ctx.fillStyle = 'rgba(0, 18, 30, 0.85)';
+    ctx.strokeStyle = `rgba(${GOLD}, 0.8)`;
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2, y - 13, w, 26, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = `rgb(${GOLD})`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y + 1);
+    ctx.restore();
+  }
+
+  // ---- 分組標籤（環的內側） ----
+  private drawGroupLabels(ctx: CanvasRenderingContext2D, t: number, dock: number) {
     let a = 0;
     if (this.state === 'opening') a = clamp01((t - this.t0 - 4400) / 800);
     else if (this.state === 'open') a = 1;
     else if (this.state === 'closing') a = 1 - clamp01((t - this.t0) / 300);
+    a *= 1 - Math.min(1, dock * 2);
     if (a <= 0) return;
 
     ctx.save();
@@ -477,7 +675,7 @@ export class HexMenu {
     // 標籤放在環的內側（核心與節點之間），不會被外圈刻度擋到
     const labelR = this.R * 0.62 - 14;
     for (const g of GROUPS) {
-      const ns = this.nodes.filter((n) => n.app.group === (g.id as GroupId));
+      const ns = this.nodes.filter((n) => !n.panel && n.app.group === (g.id as GroupId));
       if (!ns.length) continue;
       const mid = (ns[0].angle + ns[ns.length - 1].angle) / 2;
       ctx.fillText(g.label, this.cx + Math.cos(mid) * labelR, this.cy + Math.sin(mid) * labelR);

@@ -1,6 +1,6 @@
 /** HEX 選單上的程式（顯示用）；實際怎麼開由 jarvis.config.json 的 apps 決定 */
 
-export type GroupId = 'work' | 'office' | 'play' | 'tools';
+export type GroupId = 'work' | 'office' | 'play' | 'tools' | 'panel';
 
 export interface AppDef {
   id: string;
@@ -8,6 +8,8 @@ export interface AppDef {
   group: GroupId;
   /** 節點中間顯示的縮寫 */
   glyph: string;
+  /** app：開電腦上的程式；panel：在 HUD 上開浮動面板 */
+  kind?: 'app' | 'panel';
 }
 
 export const GROUPS: { id: GroupId; label: string }[] = [
@@ -31,4 +33,11 @@ export const APPS: AppDef[] = [
   { id: 'wuwa', name: '鳴潮', group: 'play', glyph: 'WW' },
   { id: 'explorer', name: '檔案總管', group: 'tools', glyph: 'FX' },
   { id: 'terminal', name: '終端機', group: 'tools', glyph: '>_' },
+];
+
+/** Dock 左邊的面板按鈕（下一步做浮動面板） */
+export const PANELS: AppDef[] = [
+  { id: 'panel-daily', name: '今日日報', group: 'panel', glyph: '日', kind: 'panel' },
+  { id: 'panel-sys', name: '系統狀態', group: 'panel', glyph: 'SYS', kind: 'panel' },
+  { id: 'panel-chat', name: 'HEX 對話', group: 'panel', glyph: 'AI', kind: 'panel' },
 ];
