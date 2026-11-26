@@ -555,3 +555,28 @@ body.hex.ar-live { background: #000; }
   box-shadow: 0 0 6px #7dffb0;
   transition: width 0.05s;
 }
+
+/* ===== HEX 對話面板 ===== */
+.hp-body.chat-body { display: flex; flex-direction: column; }
+.chat-log { flex: 1; }
+.chat-msg.me { margin-left: 18%; background: rgba(255, 201, 64, 0.1); border: 1px solid rgba(255, 201, 64, 0.35); }
+.chat-msg.sys { background: rgba(255, 80, 80, 0.08); border: 1px dashed rgba(255, 120, 120, 0.45); font-size: 13px; }
+.chat-msg { line-height: 1.75; }
+.chat-msg p { margin: 0 0 8px; }
+.chat-msg p:last-of-type { margin-bottom: 2px; }
+.chat-msg ul, .chat-msg ol { margin: 6px 0 10px; padding-left: 1.8em; }
+.chat-msg li { margin: 4px 0; padding-left: 2px; }
+.chat-msg li::marker { color: #00e5ff; font-weight: 600; }
+.chat-msg b { color: #ffd76a; }
+.chat-msg h1, .chat-msg h2, .chat-msg h3, .chat-msg h4 { margin: 6px 0; font-size: 15px; }
+.chat-meta { margin-top: 4px; font-size: 11px; opacity: 0.5; }
+.chat-quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 8px; }
+.chat-quick .hp-btn { font-size: 12px; }
+.chat-form { position: sticky; bottom: 0; display: flex; gap: 6px; padding-top: 6px; background: rgba(0, 12, 20, 0.85); }
+.chat-in { flex: 1; padding: 9px 12px; border: 1px solid rgba(0, 229, 255, 0.45); border-radius: 8px; background: rgba(0, 20, 32, 0.8); color: #e6fbff; font: 14px 'Microsoft JhengHei', system-ui, sans-serif; outline: none; }
+.chat-in:focus { border-color: #ffc940; }
+.chat-body.busy .chat-quick, .chat-body.busy .chat-form { opacity: 0.45; pointer-events: none; }
+.chat-dots i { display: inline-block; width: 6px; height: 6px; margin: 0 3px; border-radius: 50%; background: #00e5ff; animation: chatDot 1s infinite; }
+.chat-dots i:nth-child(2) { animation-delay: 0.15s; }
+.chat-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes chatDot { 0%, 100% { opacity: 0.2; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-4px); } }

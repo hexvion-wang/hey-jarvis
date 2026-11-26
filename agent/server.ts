@@ -38,11 +38,11 @@ function send(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+async function readJson(req: IncomingMessage, max = 10_000): Promise<Record<string, unknown>> {
   let data = '';
   for await (const chunk of req) {
     data += chunk;
-    if (data.length > 10_000) throw new Error('request too large');
+    if (data.length > max) throw new Error('request too large');
   }
   return data ? JSON.parse(data) : {};
 }
@@ -74,8 +74,22 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
     return send(res, 200, s ? { ok: true, ...s } : { ok: false, error: 'not-found' });
   }
 
+  if (path === '/api/chat-status' && req.method === 'GET') {
+    const ok = await fetch(`${OPENJARVIS}/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok).catch(() => false);
+    // 打開對話面板時先把模型載進顯卡（第一次載入要一段時間），並保留 30 分鐘
+    if (ok) {
+      fetch(`${OLLAMA}/api/generate`, {
+        method: 'POST',
+        body: JSON.stringify({ model: CHAT_MODEL, keep_alive: '30m' }),
+      }).catch(() => {});
+    }
+    return send(res, 200, { ok });
+  }
+
   if (req.method !== 'POST') return send(res, 405, { ok: false, error: 'method not allowed' });
-  const body = await readJson(req);
+  const body = await readJson(req, path === '/api/chat' ? 40_000 : 10_000);
+
+  if (path === '/api/chat') return chat(res, body);
 
   // 開啟程式：只能開設定檔 apps 裡列出的程式（用開始功能表的 AppID）
   if (path === '/api/launch') {
@@ -106,6 +120,61 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
   }
 
   send(res, 404, { ok: false, error: 'unknown api' });
+}
+
+// ---- HEX 對話：轉給本機的 OpenJarvis（只在 127.0.0.1） ----
+const OPENJARVIS = process.env.OPENJARVIS_URL || 'http://127.0.0.1:8000';
+const CHAT_MODEL = process.env.HEX_MODEL || 'qwen3:8b';
+const OLLAMA = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
+/** 問到這些字時，把今天的日報一起交給 AI 參考 */
+const DAILY_WORDS = /日報|今天|今日|重點|待辦|進度|工作|做了什麼|摘要|總結/;
+
+async function chat(res: ServerResponse, body: Record<string, unknown>) {
+  const raw = Array.isArray(body.messages) ? body.messages.slice(-10) : [];
+  const messages = raw
+    .filter((m: any) => (m?.role === 'user' || m?.role === 'assistant') && typeof m.content === 'string')
+    .map((m: any) => ({ role: m.role as string, content: String(m.content).slice(0, 2000) }));
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  if (!lastUser) return send(res, 400, { ok: false, error: 'empty' });
+
+  let system =
+    '你是 HEX，使用者電腦上的 AI 助理（鋼鐵人 Jarvis 風格，冷靜、俐落、友善）。' +
+    '一律使用繁體中文（台灣用語），不要用簡體字。回答要簡短口語，通常 2～5 句；要列重點時用短條列。';
+  let usedDaily = '';
+  if (DAILY_WORDS.test(lastUser.content)) {
+    const d = await readDaily(cfg).catch(() => null);
+    if (d) {
+      usedDaily = d.rel;
+      system += `\n\n以下是使用者的日報（${d.date}${d.fallback ? '，今天的還沒產生，這是最新一份' : ''}），回答時可以參考：\n${d.markdown.slice(0, 6000)}`;
+    }
+  }
+
+  const t0 = Date.now();
+  try {
+    const r = await fetch(`${OPENJARVIS}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: CHAT_MODEL,
+        // qwen3 預設會先「思考」很久，/no_think 讓它直接回答
+        messages: [{ role: 'system', content: system + ' /no_think' }, ...messages],
+        temperature: 0.6,
+        max_tokens: 800,
+        stream: false,
+      }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!r.ok) return send(res, 200, { ok: false, error: `OpenJarvis 回應 ${r.status}` });
+    const j: any = await r.json();
+    const text = String(j?.choices?.[0]?.message?.content ?? '')
+      .replace(/<think>[\s\S]*?<\/think>/g, '')
+      .trim();
+    console.log(`HEX 對話：${(Date.now() - t0) / 1000}s${usedDaily ? `（參考 ${usedDaily}）` : ''}`);
+    return send(res, 200, { ok: true, text: text || '（沒有回應）', daily: usedDaily || undefined });
+  } catch (e) {
+    const down = String(e).includes('ECONNREFUSED') || String((e as any)?.cause).includes('ECONNREFUSED');
+    return send(res, 200, { ok: false, error: down ? 'offline' : String(e) });
+  }
 }
 
 async function handleStatic(res: ServerResponse, path: string) {

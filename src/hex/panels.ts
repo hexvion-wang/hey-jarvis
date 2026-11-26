@@ -134,6 +134,7 @@ export class Panels {
       e.stopPropagation();
       const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement | null;
       if (btn) return this.action(o, btn.dataset.action!);
+      if ((e.target as HTMLElement).closest('input, textarea, form button')) return;
       // 捲軸本身留給瀏覽器
       if ((e.target as HTMLElement).closest('.hp-body') && e.offsetX > (e.target as HTMLElement).clientWidth) return;
       this.grab(e.clientX, e.clientY, o, e.target as HTMLElement, false);
