@@ -1,0 +1,17 @@
+[project]
+name = "hex-stt"
+version = "0.1.0"
+description = "HEX 本機語音辨識（faster-whisper，只綁 127.0.0.1）"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "faster-whisper>=1.1",
+    "opencc-python-reimplemented>=0.1.7",
+    # faster-whisper 1.2.1 用了 PyAV 19 移除的參數，先用 18 版
+    "av>=11,<19",
+    "nvidia-cublas-cu12>=12.4,<13",
+    "nvidia-cudnn-cu12>=9.1,<10",
+]
+
+[tool.uv]
+package = false
+required-environments = ["sys_platform == 'win32' and platform_machine == 'AMD64'"]

@@ -15,6 +15,8 @@ export class ClapDetector {
   private prevClap = 0;
   /** 0~1，給畫面上的音量條用 */
   level = 0;
+  /** 語音錄音時暫停偵測（說話的爆破音可能被當成拍手） */
+  paused = false;
 
   constructor(
     private onDouble: () => void,
@@ -64,7 +66,7 @@ export class ClapDetector {
 
     const now = performance.now();
     // 拍手：峰值高、遠高於環境噪音、峰值/RMS 比例高（很「尖」的聲音，不是持續的講話或音樂）
-    const isClap = peak > 0.3 && peak > this.floor * 10 && peak / Math.max(rms, 1e-4) > 3;
+    const isClap = !this.paused && peak > 0.3 && peak > this.floor * 10 && peak / Math.max(rms, 1e-4) > 3;
     if (isClap && now - this.lastClap > 120) {
       this.prevClap = this.lastClap;
       this.lastClap = now;

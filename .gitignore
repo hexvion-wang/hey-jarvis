@@ -5,3 +5,6 @@ jarvis.config.json
 
 # 參考用的錄影（別人的作品，不上傳）
 展示影片/
+
+# HEX 語音辨識的 Python 環境
+stt/.venv/

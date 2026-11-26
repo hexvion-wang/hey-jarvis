@@ -220,4 +220,15 @@ export function definePanels(panels: Panels, d: Deps) {
       if (q) ask(body, q[1]);
     },
   });
+
+  return {
+    /** 語音指令：打開對話面板（如果還沒開）並送出這句話 */
+    say(text: string, from: { x: number; y: number }) {
+      if (!panels.isOpen('chat')) panels.show('chat', from);
+      const body = document.querySelector('.hpanel[data-panel="chat"] .hp-body') as HTMLElement | null;
+      if (body) ask(body, text);
+      // 用說的就不要把游標停在輸入框（下次按 Enter 才會是「說話」而不是送出空白）
+      setTimeout(() => (document.activeElement as HTMLElement | null)?.blur(), 500);
+    },
+  };
 }

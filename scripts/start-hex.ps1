@@ -40,6 +40,15 @@ elseif (Test-Path $OpenJarvisDir) {
 }
 else { Warn "找不到 $OpenJarvisDir，HEX 對話不能用" }
 
+# 2b. 語音辨識（本機 Whisper），開在另一個縮小的視窗
+Step '語音辨識'
+if (Test-Up 'http://127.0.0.1:8001/health') { Ok '已經在執行' }
+elseif (Test-Path (Join-Path $Root 'stt\.venv')) {
+  Start-Process cmd.exe -ArgumentList '/c', "title HEX STT & cd /d `"$Root\stt`" & set PYTHONIOENCODING=utf-8& set HF_HUB_DISABLE_TELEMETRY=1& uv run python server.py & pause" -WindowStyle Minimized
+  Ok '啟動中（另一個縮小的視窗，約 10 秒）'
+}
+else { Warn '還沒安裝語音辨識（stt），語音功能不能用' }
+
 # 3. 本機 agent（HEX 網頁與開程式、日報）
 Step '本機 agent'
 if (Test-Up "$Api/api/health") {

@@ -8,6 +8,7 @@ import { BUILD_ID, ensureLatest } from '../version';
 import { DeskLink } from '../shared/link';
 import { OneEuro } from '../phone/gestures';
 import { ClapDetector } from './clap';
+import { VoiceInput } from './voice';
 
 document.getElementById('ver')!.textContent = BUILD_ID;
 ensureLatest();
@@ -141,7 +142,7 @@ async function refreshSys() {
 }
 setInterval(refreshSys, 2000);
 
-definePanels(panels, {
+const chat = definePanels(panels, {
   api,
   agentOk: () => agentOk,
   getSys: () => hexConsole.sys,
@@ -291,7 +292,7 @@ const micBtn = $('micBtn');
 const micLevel = $('micLevel');
 const clap = new ClapDetector(
   () => {
-    if (stage === 'holo') return;
+    if (stage === 'holo') return void talk(); // 全息模式拍手兩下：說一句話
     stepStage(1);
     toast(stage === 'console' ? '👏 HEX 主控台' : '👏 全息模式');
   },
@@ -335,6 +336,53 @@ bootBtn.addEventListener('click', async () => {
   toast(r.on ? '已開啟：之後 Windows 開機會自動打開 HEX' : '已關閉開機啟動');
 });
 setTimeout(refreshBoot, 1500);
+
+// ---- 語音指令（本機 Whisper）：按「說話」/ Enter / 全息模式拍手兩下 → 錄一句 → 辨識 → 交給 HEX 對話 ----
+const talkBtn = $('talkBtn');
+const voiceEl = $('voice');
+const voiceText = voiceEl.querySelector('.vo-text') as HTMLElement;
+const voiceLevel = $('voiceLevel');
+const voice = new VoiceInput((s) => {
+  voiceEl.className = s === 'idle' ? '' : `show ${s}`;
+  talkBtn.classList.toggle('on', s !== 'idle');
+  if (s === 'listening') voiceText.textContent = '聆聽中…說完停一下';
+  if (s === 'thinking') voiceText.textContent = '辨識中…';
+  clap.paused = s !== 'idle';
+});
+setInterval(() => (voiceLevel.style.width = `${Math.round(voice.level * 100)}%`), 50);
+
+async function talk() {
+  if (voice.state === 'listening') return voice.cancel();
+  if (voice.state !== 'idle') return;
+  if (!agentOk) return toast('需要本機 agent 才能用語音', 4000);
+  lastActivity = performance.now();
+  let blob: Blob | null;
+  try {
+    blob = await voice.record();
+  } catch {
+    return toast('麥克風權限被拒絕：點網址列左邊的圖示，把麥克風改成「允許」', 5000);
+  }
+  if (!blob) return toast('沒有聽到聲音');
+  try {
+    const res = await fetch('/api/stt', { method: 'POST', headers: { 'Content-Type': 'audio/webm', 'X-Jarvis': '1' }, body: blob });
+    const r = await res.json();
+    if (!r.ok) {
+      toast(r.error === 'loading' ? '語音模型還在載入，等幾秒再試' : r.error === 'offline' ? '語音辨識服務沒有啟動（重開 HEX 試試）' : `辨識失敗：${r.error}`, 4000);
+      return;
+    }
+    const text = String(r.text ?? '').trim();
+    if (!text) return toast('沒聽清楚，再說一次');
+    voiceText.textContent = `「${text}」`;
+    if (stage !== 'holo') goStage('holo');
+    const from = { x: innerWidth / 2, y: innerHeight / 2 };
+    setTimeout(() => chat.say(text, from), stage === 'holo' ? 0 : 900);
+  } catch {
+    toast('本機 agent 沒有回應', 4000);
+  } finally {
+    setTimeout(() => voice.done(), 600);
+  }
+}
+talkBtn.addEventListener('click', talk);
 // 之前開過就自動開（瀏覽器記得麥克風權限時不會再問）
 if (localStorage.getItem('hex-mic')) toggleMic();
 setInterval(() => (micLevel.style.width = `${Math.round(clap.level * 100)}%`), 50);
@@ -439,7 +487,11 @@ window.addEventListener('pointerdown', (e) => {
   pressAt(e.clientX, e.clientY);
 });
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Space') {
+  if ((e.target as HTMLElement).closest?.('input, textarea')) return;
+  if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+    e.preventDefault();
+    talk();
+  } else if (e.code === 'Space') {
     e.preventDefault();
     stepStage(1);
   } else if (e.code === 'KeyV') {

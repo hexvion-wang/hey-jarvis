@@ -88,6 +88,34 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
     return send(res, 200, { ok: now === on, on: now });
   }
 
+  if (path === '/api/stt-status' && req.method === 'GET') {
+    const r = await fetch(`${STT}/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.json()).catch(() => null);
+    return send(res, 200, { ok: !!r?.ready, device: r?.device ?? '', loading: !!r && !r.ready });
+  }
+  if (path === '/api/stt' && req.method === 'POST') {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const c of req) {
+      size += c.length;
+      if (size > 10 * 1024 * 1024) return send(res, 413, { ok: false, error: 'too large' });
+      chunks.push(c);
+    }
+    try {
+      const r = await fetch(`${STT}/transcribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': String(req.headers['content-type'] ?? 'audio/webm'), 'X-HEX': '1' },
+        body: Buffer.concat(chunks),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const j: any = await r.json();
+      if (!r.ok) return send(res, 200, { ok: false, error: j?.error === 'loading' ? 'loading' : String(j?.error ?? r.status) });
+      console.log(`語音：${j.ms}ms「${j.text}」`);
+      return send(res, 200, { ok: true, text: j.text, ms: j.ms });
+    } catch {
+      return send(res, 200, { ok: false, error: 'offline' });
+    }
+  }
+
   if (path === '/api/chat-status' && req.method === 'GET') {
     const ok = await fetch(`${OPENJARVIS}/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok).catch(() => false);
     // 打開對話面板時先把模型載進顯卡（第一次載入要一段時間），並保留 30 分鐘
@@ -146,6 +174,7 @@ function launchApp(id: string) {
 const OPENJARVIS = process.env.OPENJARVIS_URL || 'http://127.0.0.1:8000';
 const CHAT_MODEL = process.env.HEX_MODEL || 'qwen3:8b';
 const OLLAMA = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
+const STT = process.env.HEX_STT_URL || 'http://127.0.0.1:8001';
 /** 問到這些字時，把今天的日報一起交給 AI 參考 */
 const DAILY_WORDS = /日報|今天|今日|重點|待辦|進度|工作|做了什麼|摘要|總結/;
 

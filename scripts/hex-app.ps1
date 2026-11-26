@@ -54,6 +54,15 @@ if (-not (Test-Up 'http://127.0.0.1:8000/health') -and (Test-Path $OpenJarvisDir
   $started += $oj
   Log "OpenJarvis 啟動 pid=$($oj.Id)"
 }
+# 2b. 語音辨識（本機 Whisper，隱藏視窗）
+if (-not (Test-Up 'http://127.0.0.1:8001/health') -and (Test-Path (Join-Path $Root 'stt\.venv'))) {
+  $env:PYTHONIOENCODING = 'utf-8'; $env:HF_HUB_DISABLE_TELEMETRY = '1'
+  $stt = Start-Process uv -WorkingDirectory (Join-Path $Root 'stt') -WindowStyle Hidden -PassThru `
+    -ArgumentList 'run', 'python', 'server.py' `
+    -RedirectStandardOutput (Join-Path $LogDir 'stt.log') -RedirectStandardError (Join-Path $LogDir 'stt.err.log')
+  $started += $stt
+  Log "語音辨識啟動 pid=$($stt.Id)"
+}
 # 3. 本機 agent：程式碼有改過才重新建置
 $dist = Join-Path $Root 'dist\hex.html'
 $newest = Get-ChildItem (Join-Path $Root 'src'), (Join-Path $Root '*.html') -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1

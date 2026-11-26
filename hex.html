@@ -13,6 +13,7 @@
     <canvas id="hud"></canvas>
     <button id="arBtn" data-hex-action="ar" title="鍵盤 V">◉ AR 鏡頭</button>
     <button id="micBtn" data-hex-action="mic" title="拍手兩下：前進一段">🎤 拍手 <i id="micLevel"></i></button>
+    <button id="talkBtn" data-hex-action="talk" title="說一句話（Enter 鍵／全息模式拍手兩下）">🎙 說話</button>
     <button id="bootBtn" data-hex-action="boot" title="Windows 開機後自動打開 HEX">⏻ 開機啟動</button>
 
     <div class="corner tl">
@@ -38,6 +39,7 @@
     </div>
 
     <div id="toast"></div>
+    <div id="voice"><i class="vo-ring"></i><span class="vo-text">聆聽中…</span><b class="vo-bar"><i id="voiceLevel"></i></b></div>
 
     <script type="module" src="./src/hex/main.ts"></script>
   </body>
