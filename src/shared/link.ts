@@ -10,7 +10,9 @@ export type LinkMsg =
   | { type: 'wake'; text?: string } // 電腦被叫醒
   | { type: 'standby' } // 電腦回到待命
   | { type: 'status'; headline: string; sub?: string } // 電腦畫面上的訊息（指令結果等）
-  | { type: 'core' }; // 手機捏了中間的核心 → 請電腦醒來
+  | { type: 'core' } // 手機捏了中間的核心 → 請電腦醒來
+  | { type: 'hand'; ok: boolean; x: number; y: number } // 手的位置（0~1，已鏡像）
+  | { type: 'pinch'; down: boolean }; // 捏下 / 放開
 
 export type LinkState = 'idle' | 'waiting' | 'connecting' | 'connected' | 'error';
 

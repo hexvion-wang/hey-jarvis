@@ -2,7 +2,7 @@ import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
 import { toScreen, type Viewport } from './coords';
 
 /** One Euro Filter：慢動作時強力平滑、快動作時降低延遲 */
-class OneEuro {
+export class OneEuro {
   private x: number | null = null;
   private dx = 0;
   private t = 0;
@@ -65,6 +65,8 @@ export interface GestureState {
   clickPos: { x: number; y: number } | null;
   /** 拇指-食指距離 / 掌寬，除錯用 */
   ratio: number;
+  /** 未平滑的游標位置（0~1，已鏡像，以鏡頭畫面為準），給遠端控制用 */
+  raw: { x: number; y: number };
 }
 
 export class GestureTracker {
@@ -82,6 +84,7 @@ export class GestureTracker {
     pinchEnd: false,
     clickPos: null,
     ratio: 1,
+    raw: { x: 0.5, y: 0.5 },
   };
 
   constructor(public config: GestureConfig = DEFAULT_CONFIG) {}
@@ -110,6 +113,8 @@ export class GestureTracker {
     const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
     const palm = dist(px(0), px(9)) || 1;
     s.ratio = dist(px(4), px(8)) / palm;
+
+    s.raw = { x: 1 - (hand[4].x + hand[8].x) / 2, y: (hand[4].y + hand[8].y) / 2 };
 
     // ---- 游標：拇指尖與食指尖的中點 ----
     const mid = toScreen(vp, (hand[4].x + hand[8].x) / 2, (hand[4].y + hand[8].y) / 2);

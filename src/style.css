@@ -345,3 +345,45 @@ body.hex #toast {
   z-index: 4;
 }
 body.hex #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* 手機：控制器模式 */
+#ctrlHint {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  opacity: 0.8;
+  pointer-events: none;
+  z-index: 4;
+}
+#ctrlHint b { font: 700 18px ui-monospace, Menlo, monospace; letter-spacing: 0.4em; color: #7dffb0; text-shadow: 0 0 8px #7dffb0; }
+body.controller #ctrlHint { display: flex; }
+
+/* HEX：iPhone 配對欄 */
+#linkBox {
+  position: fixed;
+  right: 24px;
+  bottom: 56px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 12px ui-monospace, Consolas, monospace;
+  color: rgba(0, 229, 255, 0.75);
+  z-index: 5;
+}
+#linkBox #linkCode { width: 120px; flex: none; }
+#linkBox button {
+  padding: 6px 12px;
+  border: 1px solid var(--cyan);
+  border-radius: 6px;
+  background: rgba(0, 229, 255, 0.1);
+  color: var(--cyan);
+  font: inherit;
+  cursor: pointer;
+}
+#linkBox button:hover { background: rgba(0, 229, 255, 0.25); }

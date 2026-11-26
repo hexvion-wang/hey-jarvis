@@ -140,7 +140,14 @@ function loop() {
     handsEl.textContent = `HANDS ${result.landmarks.length}`;
 
     const g = gestures.update(vp, result.landmarks[0], now);
-    if (g.pinchStart && g.clickPos) press(g.clickPos.x, g.clickPos.y, now, true);
+    if (controller()) {
+      // 控制器模式：手的位置和捏的動作傳給電腦，手機自己不處理點擊
+      link.send({ type: 'hand', ok: g.hasHand, x: g.raw.x, y: g.raw.y });
+      if (g.pinchStart) link.send({ type: 'pinch', down: true });
+      if (g.pinchEnd) link.send({ type: 'pinch', down: false });
+    } else if (g.pinchStart && g.clickPos) {
+      press(g.clickPos.x, g.clickPos.y, now, true);
+    }
     gestureEl.textContent = g.hasHand ? `${g.pinching ? 'PINCH' : 'POINT'} ${g.ratio.toFixed(2)}` : 'NO HAND';
     gestureEl.classList.toggle('pinch', g.pinching);
 
@@ -156,6 +163,13 @@ function loop() {
 
   const g = gestures.state;
   ctx.clearRect(0, 0, vp.screenW, vp.screenH);
+  document.body.classList.toggle('controller', controller());
+  if (controller()) {
+    // 控制器模式：只畫手的骨架，畫面保持乾淨
+    if (result) for (const hand of result.landmarks) drawHand(ctx, vp, hand);
+    drawEffects(ctx, vp.screenW, vp.screenH, now);
+    return;
+  }
   drawBackdrop(ctx, vp.screenW, vp.screenH, now);
   const hovered = drawButtons(ctx, buttons, g.hasHand ? g.cursor : null, dt, now);
   // 只記錄「還沒捏」時停留的按鈕，捏住後游標飄走不影響判定
@@ -169,6 +183,8 @@ function loop() {
 
 // ---- 跟電腦連線 ----
 let bootStart = -1;
+/** 連上電腦時，手機變成手勢控制器 */
+const controller = () => link.connected;
 const linkEl = $('link');
 const bannerEl = $('banner');
 let bannerTimer = 0;
@@ -189,7 +205,7 @@ const link = new PhoneLink({
         : state === 'error'
           ? `LINK ✗ ${detail ?? ''}`
           : `配對碼 ${link.code} · 在電腦輸入`;
-    if (state === 'connected') showBanner('已連上電腦');
+    if (state === 'connected') showBanner('已連上電腦 · 控制器模式');
   },
   onMessage(msg) {
     if (msg.type === 'wake') {
@@ -213,7 +229,7 @@ function goOnline() {
 
 // 直接用手指點按鈕也有效（方便比較、或在電腦上測試）
 window.addEventListener('pointerdown', (e) => {
-  if (!document.body.classList.contains('online')) return;
+  if (!document.body.classList.contains('online') || controller()) return;
   if ((e.target as HTMLElement).closest('#gestureBar, #status')) return;
   press(e.clientX, e.clientY, performance.now());
 });
