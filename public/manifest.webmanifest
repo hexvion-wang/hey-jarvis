@@ -1,0 +1,10 @@
+{
+  "name": "J.A.R.V.I.S.",
+  "short_name": "Jarvis",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#000810",
+  "theme_color": "#000810"
+}

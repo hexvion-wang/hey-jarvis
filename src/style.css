@@ -51,7 +51,7 @@ body.online #cam { opacity: 1; }
   right: 0;
   display: flex;
   justify-content: space-between;
-  padding: 10px 16px;
+  padding: 10px max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
   font: 12px/1 ui-monospace, 'SF Mono', Menlo, monospace;
   letter-spacing: 0.15em;
   text-shadow: 0 0 6px var(--cyan);
@@ -82,14 +82,14 @@ body.online #cam { opacity: 1; }
   border-top-color: var(--cyan);
   box-shadow: 0 0 18px var(--cyan-dim);
 }
-.r1 { width: 240px; height: 240px; animation: spin 6s linear infinite; }
-.r2 { width: 290px; height: 290px; border-style: dashed; animation: spin 14s linear infinite reverse; }
+.r1 { width: min(240px, 56vmin); height: min(240px, 56vmin); animation: spin 6s linear infinite; }
+.r2 { width: min(290px, 68vmin); height: min(290px, 68vmin); border-style: dashed; animation: spin 14s linear infinite reverse; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 #startBtn {
   position: relative;
-  width: 180px;
-  height: 180px;
+  width: min(180px, 42vmin);
+  height: min(180px, 42vmin);
   border-radius: 50%;
   border: 2px solid var(--cyan);
   background: radial-gradient(circle, rgba(0, 229, 255, 0.25), rgba(0, 229, 255, 0.03) 70%);
@@ -104,10 +104,10 @@ body.online #cam { opacity: 1; }
 #startBtn:active { transform: scale(0.96); }
 #startBtn:disabled { opacity: 0.5; }
 
-.hint { position: absolute; top: calc(50% + 170px); font-size: 13px; opacity: 0.7; }
+.hint { position: absolute; top: calc(50% + min(160px, 36vmin)); font-size: 13px; opacity: 0.7; }
 #error {
   position: absolute;
-  top: calc(50% + 200px);
+  top: calc(50% + min(160px, 36vmin) + 22px);
   max-width: 80%;
   text-align: center;
   font-size: 14px;
