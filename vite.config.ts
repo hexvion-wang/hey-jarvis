@@ -23,7 +23,7 @@ export default defineConfig({
   build: {
     rolldownOptions: {
       // 兩個頁面：index.html（手機手勢）、desk.html（電腦語音）
-      input: { main: 'index.html', desk: 'desk.html' },
+      input: { main: 'index.html', desk: 'desk.html', hex: 'hex.html' },
     },
   },
   server: {

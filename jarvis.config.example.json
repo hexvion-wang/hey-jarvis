@@ -3,5 +3,10 @@
   "dailyReport": {
     "folder": "閱讀/台美股日報",
     "format": "YYYY-MM-DD"
+  },
+  "apps": {
+    "obsidian": "md.obsidian",
+    "chrome": "Chrome",
+    "explorer": "Microsoft.Windows.Explorer"
   }
 }

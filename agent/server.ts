@@ -3,9 +3,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, resolve, relative } from 'node:path';
+import { spawn } from 'node:child_process';
 import { findDaily, searchNote, openInObsidian, type VaultConfig } from './obsidian.ts';
 
-const PORT = 4000;
+const PORT = Number(process.env.JARVIS_PORT) || 4000;
 const ROOT = resolve(import.meta.dirname, '..');
 const DIST = join(ROOT, 'dist');
 const CONFIG_PATH = join(ROOT, 'jarvis.config.json');
@@ -14,7 +15,8 @@ if (!existsSync(CONFIG_PATH)) {
   console.error('找不到 jarvis.config.json，請複製 jarvis.config.example.json 並填入 Obsidian vault 路徑');
   process.exit(1);
 }
-const cfg: VaultConfig = JSON.parse(await readFile(CONFIG_PATH, 'utf8'));
+const cfg: VaultConfig & { apps?: Record<string, string> } = JSON.parse(await readFile(CONFIG_PATH, 'utf8'));
+const apps: Record<string, string> = cfg.apps ?? {};
 if (!existsSync(cfg.vault)) {
   console.error(`vault 路徑不存在：${cfg.vault}`);
   process.exit(1);
@@ -57,9 +59,23 @@ function allowed(req: IncomingMessage) {
 
 async function handleApi(req: IncomingMessage, res: ServerResponse, path: string) {
   if (path === '/api/health') return send(res, 200, { ok: true });
-  if (req.method !== 'POST' || !allowed(req)) return send(res, 403, { ok: false, error: 'forbidden' });
+  if (!allowed(req)) return send(res, 403, { ok: false, error: 'forbidden' });
 
+  // 設定檔裡有哪些程式可以開（只回傳 id，不回傳路徑）
+  if (path === '/api/apps' && req.method === 'GET') return send(res, 200, { ok: true, ids: Object.keys(apps) });
+
+  if (req.method !== 'POST') return send(res, 405, { ok: false, error: 'method not allowed' });
   const body = await readJson(req);
+
+  // 開啟程式：只能開設定檔 apps 裡列出的程式（用開始功能表的 AppID）
+  if (path === '/api/launch') {
+    const id = String(body.id ?? '');
+    const appId = Object.hasOwn(apps, id) ? apps[id] : undefined;
+    if (!appId) return send(res, 404, { ok: false, error: 'unknown app' });
+    spawn('explorer.exe', [`shell:AppsFolder\\${appId}`], { detached: true, stdio: 'ignore' }).unref();
+    console.log(`開啟程式：${id}`);
+    return send(res, 200, { ok: true, id });
+  }
 
   if (path === '/api/daily') {
     const offset = Math.max(-7, Math.min(0, Number(body.offset) || 0));
@@ -83,7 +99,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
 }
 
 async function handleStatic(res: ServerResponse, path: string) {
-  const file = resolve(DIST, '.' + (path === '/' ? '/desk.html' : decodeURIComponent(path)));
+  const file = resolve(DIST, '.' + (path === '/' ? '/hex.html' : decodeURIComponent(path)));
   const rel = relative(DIST, file);
   if (rel.startsWith('..') || !existsSync(file)) {
     res.writeHead(404);

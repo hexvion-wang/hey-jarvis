@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000810" />
+    <title>H.E.X.</title>
+  </head>
+  <body class="hex">
+    <canvas id="hud"></canvas>
+
+    <div class="corner tl">
+      <b>H.E.X.</b>
+      <span id="state">STANDBY</span>
+    </div>
+    <div class="corner tr">
+      <span id="clock">--:--:--</span>
+      <span id="agent">AGENT --</span>
+    </div>
+    <div class="corner bl">
+      <span>點中間的核心 / 空白鍵：展開　·　Esc：收回</span>
+      <span>版本 <span id="ver"></span></span>
+    </div>
+    <div class="corner br">
+      <span id="appsCount">APPS --</span>
+    </div>
+
+    <div id="toast"></div>
+
+    <script type="module" src="./src/hex/main.ts"></script>
+  </body>
+</html>
