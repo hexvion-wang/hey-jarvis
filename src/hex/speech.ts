@@ -2,7 +2,7 @@
  * HEX 說話：文字 → 本機 Kokoro 男聲（agent /api/speak）→ 加「機械感」音效 → 播放。
  *
  * 機械感（Web Audio，全部在瀏覽器裡做）：
- * - 音調稍微壓低（播放速度 0.95）
+ * - 語速 1.3 倍、不放慢（2026-11-27 使用者試聽後選的）
  * - 梳狀濾波：很短的回授延遲，產生金屬管腔的共鳴
  * - 環形調變：混一點點和 55Hz 相乘的訊號，帶出電子合成感
  * - 高通＋中高頻提升：像透過頭盔裡的喇叭／無線電
@@ -106,7 +106,8 @@ export class HexSpeech {
     if (id !== this.queueId) return;
     const src = ctx.createBufferSource();
     src.buffer = buf;
-    src.playbackRate.value = this.level === 'strong' ? 0.97 : 0.99;
+    // 不再放慢播放（使用者覺得太慢）；語速由語音服務決定
+    src.playbackRate.value = 1;
     src.connect(this.input!);
     this.current = src;
     await new Promise<void>((resolve) => {

@@ -61,6 +61,8 @@ s2t = OpenCC("s2twp")  # 簡體 → 台灣繁體（含常用詞）
 state = {"model": None, "device": "", "error": "", "tts": None, "g2p": None}
 TTS_DIR = Path(__file__).parent / "models"
 TTS_VOICE = os.environ.get("HEX_TTS_VOICE", "zm_034")
+# 語速：2026-11-27 使用者試聽後選 1.3 倍（原本 1.0 太慢）
+TTS_SPEED = float(os.environ.get("HEX_TTS_SPEED", "1.3"))
 tts_lock = threading.Lock()
 
 
@@ -113,7 +115,7 @@ def clean_for_speech(text: str) -> str:
     return text[:400]
 
 
-def synth(text: str, voice: str = TTS_VOICE, speed: float = 1.0) -> bytes:
+def synth(text: str, voice: str = TTS_VOICE, speed: float = TTS_SPEED) -> bytes:
     import io
     import wave
 
@@ -254,7 +256,7 @@ class Handler(BaseHTTPRequestHandler):
             if not re.fullmatch(r"z[mf]_\d{3}", voice):
                 voice = TTS_VOICE
             t0 = time.time()
-            wav = synth(str(body.get("text", "")), voice, float(body.get("speed") or 1.0))
+            wav = synth(str(body.get("text", "")), voice, min(2.0, max(0.5, float(body.get("speed") or TTS_SPEED))))
         except Exception as exc:  # noqa: BLE001
             print(f"[tts] error: {exc}", flush=True)
             return self._send(500, {"error": str(exc)})
