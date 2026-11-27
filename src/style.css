@@ -657,3 +657,23 @@ body.hex.ar-live { background: #000; }
 #voice.thinking .vo-bar { visibility: hidden; }
 @keyframes voPulse { 0%, 100% { transform: scale(0.85); opacity: 0.6; } 50% { transform: scale(1.1); opacity: 1; } }
 @keyframes voSpin { to { transform: rotate(360deg); } }
+
+/* ===== HEX：語音輸出開關 ===== */
+#ttsBtn {
+  position: fixed;
+  top: 184px;
+  right: 24px;
+  padding: 7px 14px;
+  border: 1px solid rgba(var(--hex-rgb), 0.6);
+  border-radius: 999px;
+  background: rgba(0, 18, 30, 0.6);
+  color: rgb(var(--hex-rgb));
+  font: 600 12px ui-monospace, Consolas, 'Microsoft JhengHei', monospace;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  z-index: 5;
+}
+#ttsBtn:hover { border-color: #ffc940; color: #ffc940; }
+#ttsBtn.speaking { box-shadow: 0 0 14px rgba(var(--hex-rgb), 0.6); animation: ttsPulse 0.9s ease-in-out infinite; }
+@keyframes ttsPulse { 50% { box-shadow: 0 0 22px rgba(var(--hex-rgb), 0.9); } }
+#bootBtn { top: 224px; }

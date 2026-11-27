@@ -9,3 +9,4 @@ jarvis.config.json
 # HEX 語音辨識的 Python 環境
 stt/.venv/
 __pycache__/
+stt/models/

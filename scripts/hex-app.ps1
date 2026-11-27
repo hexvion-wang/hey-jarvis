@@ -26,7 +26,7 @@ $Browser = @(
 
 # 路徑有空白和中文：轉成編碼過的網址；參數整串自己加引號（Start-Process 不會幫忙）
 $loading = ([Uri](Join-Path $AppDir 'loading.html')).AbsoluteUri
-$browserArgs = "--app=`"$loading`" --user-data-dir=`"$HexProfile`" --start-maximized --no-first-run --no-default-browser-check"
+$browserArgs = "--app=`"$loading`" --user-data-dir=`"$HexProfile`" --start-maximized --no-first-run --no-default-browser-check --autoplay-policy=no-user-gesture-required"
 
 # 已經開著（agent 在跑）→ 只再開一個 HEX 視窗
 if (Test-Up "$Api/api/health") {

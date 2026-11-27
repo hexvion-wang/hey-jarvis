@@ -10,6 +10,8 @@ interface Deps {
   toast(text: string, ms?: number): void;
   /** 對話裡開了程式：讓 Dock 上對應的按鈕閃一下 */
   onOpened?(ids: string[]): void;
+  /** HEX 回答了（唸出來用） */
+  onReply?(text: string): void;
 }
 
 /** Dock 按鈕 id → 面板 id */
@@ -159,6 +161,7 @@ export function definePanels(panels: Panels, d: Deps) {
           (opened.length ? `<div class="chat-opened">${opened.map((id) => `<span>▶ ${esc(id)}</span>`).join('')}</div>` : '') +
           `<div class="chat-meta">${((performance.now() - t0) / 1000).toFixed(1)} 秒${r.daily ? '　·　參考了日報' : ''}</div>`;
         if (opened.length) d.onOpened?.(opened);
+        d.onReply?.(r.text);
       } else {
         history.pop();
         wait.className = 'chat-msg sys';

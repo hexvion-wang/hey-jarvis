@@ -11,6 +11,7 @@ import { ClapDetector } from './clap';
 import { VoiceInput } from './voice';
 import { Swords, type SwordPose } from './swords';
 import { hexColor } from './theme';
+import { HexSpeech, type VoiceLevel } from './speech';
 
 document.getElementById('ver')!.textContent = BUILD_ID;
 ensureLatest();
@@ -93,8 +94,31 @@ let stage: Stage = 'standby';
 let pending: Stage | null = null;
 /** 萬劍歸宗：喚醒動畫／回待機時的散開 */
 const swords = new Swords();
-// 化為 HEX 的瞬間：整個介面換成紅色
-swords.onFormed = () => hexColor.set(true);
+// 化為 HEX 的瞬間：整個介面換成紅色，HEX 開口打招呼
+swords.onFormed = () => {
+  hexColor.set(true);
+  greet();
+};
+
+// ---- HEX 說話（本機 Kokoro 男聲＋機械感音效） ----
+const speech = new HexSpeech(
+  async (text) => {
+    if (!agentOk) return null;
+    const r = await fetch('/api/speak', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Jarvis': '1' }, body: JSON.stringify({ text }) }).catch(() => null);
+    if (!r || !r.ok || !(r.headers.get('content-type') ?? '').includes('audio')) return null;
+    return r.arrayBuffer();
+  },
+  (on) => {
+    // 講話時暫停拍手偵測（喇叭的聲音可能被當成拍手）
+    clap.paused = on || voice.state !== 'idle';
+    document.getElementById('ttsBtn')?.classList.toggle('speaking', on);
+  },
+);
+function greet() {
+  const h = new Date().getHours();
+  const hi = h < 5 ? '夜深了' : h < 11 ? '早安' : h < 14 ? '午安' : h < 18 ? '下午好' : '晚安';
+  speech.say(`${hi}，歡迎回來。HEX 系統已上線。`);
+}
 let scatterPending = false;
 let lastActivity = performance.now();
 
@@ -161,6 +185,7 @@ const chat = definePanels(panels, {
   agentOk: () => agentOk,
   getSys: () => hexConsole.sys,
   toast,
+  onReply: (text) => speech.say(text),
   onOpened(ids) {
     const t = performance.now();
     lastActivity = t;
@@ -363,7 +388,24 @@ const voice = new VoiceInput((s) => {
   talkBtn.classList.toggle('on', s !== 'idle');
   if (s === 'listening') voiceText.textContent = '聆聽中…說完停一下';
   if (s === 'thinking') voiceText.textContent = '辨識中…';
-  clap.paused = s !== 'idle';
+  clap.paused = s !== 'idle' || speech.speaking;
+  if (s === 'listening') speech.stop(); // 開始聽你說話時，HEX 先閉嘴
+});
+
+// 語音開關：強 → 弱 → 靜音（講話中按一下 = 先停下來）
+const ttsBtn = $('ttsBtn');
+const TTS_LABEL: Record<VoiceLevel, string> = { strong: '🔊 語音：強', weak: '🔉 語音：弱', off: '🔇 靜音' };
+const paintTts = () => {
+  ttsBtn.textContent = TTS_LABEL[speech.level];
+  ttsBtn.classList.toggle('on', speech.level !== 'off');
+};
+paintTts();
+ttsBtn.addEventListener('click', () => {
+  if (speech.speaking) return speech.stop();
+  const next: VoiceLevel = speech.level === 'strong' ? 'weak' : speech.level === 'weak' ? 'off' : 'strong';
+  speech.setLevel(next);
+  paintTts();
+  if (next !== 'off') speech.say(next === 'strong' ? '語音模式：強。' : '語音模式：弱。');
 });
 setInterval(() => (voiceLevel.style.width = `${Math.round(voice.level * 100)}%`), 50);
 

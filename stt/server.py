@@ -1,8 +1,9 @@
-"""HEX 本機語音辨識服務（faster-whisper）。
+"""HEX 本機語音服務：語音辨識（faster-whisper）＋唸出來（Kokoro 中文男聲）。
 
 - 只綁 127.0.0.1:8001，只接受帶 X-HEX: 1 標頭的請求（跨站網頁送不了自訂標頭）
 - POST /transcribe：body 是一段錄音（webm / wav 等），回傳 {"text": "...", "ms": 123}
-- GET  /health：{"ready": true/false, "device": "cuda"/"cpu"}
+- POST /speak：body 是 {"text": "...", "voice": "zm_034"}，回傳 WAV 語音
+- GET  /health：{"ready": true/false, "device": "cuda"/"cpu", "tts": true/false}
 - 不存檔、不上網（模型第一次啟動時會從 Hugging Face 下載，之後用本機快取）
 """
 
@@ -57,7 +58,79 @@ HALLUCINATIONS = re.compile(
 )
 
 s2t = OpenCC("s2twp")  # 簡體 → 台灣繁體（含常用詞）
-state = {"model": None, "device": "", "error": ""}
+state = {"model": None, "device": "", "error": "", "tts": None, "g2p": None}
+TTS_DIR = Path(__file__).parent / "models"
+TTS_VOICE = os.environ.get("HEX_TTS_VOICE", "zm_034")
+tts_lock = threading.Lock()
+
+
+def load_tts() -> None:
+    """Kokoro 中文語音（CPU 就夠快）。模型檔不在就跳過，只有辨識功能。"""
+    onnx = TTS_DIR / "kokoro-v1.1-zh.onnx"
+    voices = TTS_DIR / "voices-v1.1-zh.bin"
+    if not onnx.exists() or not voices.exists():
+        print("[tts] 找不到 Kokoro 模型，略過語音輸出", flush=True)
+        return
+    try:
+        t0 = time.time()
+        import shutil
+
+        import espeakng_loader
+        from kokoro_onnx import Kokoro
+        from kokoro_onnx.config import EspeakConfig
+
+        # espeak-ng（英文發音）是舊的 C 程式，讀不了有中文或空白的路徑（專案資料夾「Hey 賈維斯」），
+        # 所以把它的資料複製到純英文路徑再用
+        data = Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir())) / "HEX" / "espeak-ng-data"
+        if not (data / "phontab").exists():
+            shutil.copytree(espeakng_loader.get_data_path(), data, dirs_exist_ok=True)
+        espeak = EspeakConfig(lib_path=espeakng_loader.get_library_path(), data_path=str(data))
+        from misaki import zh
+
+        k = Kokoro(str(onnx), str(voices), espeak_config=espeak)
+        # 中文用 misaki；夾在句子裡的英文（ChatGPT、Discord）交給 Kokoro 內建的 espeak 英文發音
+        g2p = zh.ZHG2P(version="1.1", en_callable=lambda en: k.tokenizer.phonemize(en, lang="en-us"))
+        state.update(tts=k, g2p=g2p)
+        synth("系統上線。")  # 暖機
+        print(f"[tts] Kokoro ready ({time.time() - t0:.1f}s)", flush=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[tts] failed: {exc}", flush=True)
+
+
+# 唸之前先整理文字：拿掉 Markdown 符號、表情符號、網址
+_MD = re.compile(r"(\*\*|__|`+|^#+\s*|^\s*[-*•]\s+|^\s*\d+\.\s+|\[\[[^\]]*\]\]|https?://\S+)", re.M)
+_EMOJI = re.compile("[\U0001F000-\U0001FFFF\u2600-\u27BF\uFE0F]")
+
+
+def clean_for_speech(text: str) -> str:
+    text = _MD.sub("", text)
+    text = _EMOJI.sub("", text)
+    text = re.sub(r"\s*\n+\s*", "。", text.strip())
+    text = re.sub(r"[。]{2,}", "。", text)
+    return text[:400]
+
+
+def synth(text: str, voice: str = TTS_VOICE, speed: float = 1.0) -> bytes:
+    import io
+    import wave
+
+    import numpy as np
+
+    k, g2p = state["tts"], state["g2p"]
+    text = clean_for_speech(text)
+    if not text:
+        return b""
+    with tts_lock:
+        phonemes, _ = g2p(text)
+        samples, sr = k.create(phonemes, voice=voice, speed=speed, is_phonemes=True)
+    pcm = (np.clip(samples, -1, 1) * 32767).astype("<i2")
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        w.writeframes(pcm.tobytes())
+    return buf.getvalue()
 
 
 def load_model() -> None:
@@ -131,12 +204,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/health":
-            return self._send(200, {"ready": state["model"] is not None, "device": state["device"], "error": state["error"]})
+            return self._send(
+                200,
+                {"ready": state["model"] is not None, "device": state["device"], "error": state["error"], "tts": state["tts"] is not None},
+            )
         self._send(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802
         if not self._allowed():
             return self._send(403, {"error": "forbidden"})
+        if self.path == "/speak":
+            return self._speak()
         if self.path != "/transcribe":
             return self._send(404, {"error": "not found"})
         if state["model"] is None:
@@ -157,6 +235,29 @@ class Handler(BaseHTTPRequestHandler):
         print(f"[stt] {ms}ms: {text}", flush=True)
         self._send(200, {"text": text, "ms": ms})
 
+    def _speak(self) -> None:
+        if state["tts"] is None:
+            return self._send(503, {"error": "tts not ready"})
+        n = int(self.headers.get("Content-Length") or 0)
+        if n <= 0 or n > 20000:
+            return self._send(400, {"error": "bad size"})
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8"))
+            voice = str(body.get("voice") or TTS_VOICE)
+            if not re.fullmatch(r"z[mf]_\d{3}", voice):
+                voice = TTS_VOICE
+            t0 = time.time()
+            wav = synth(str(body.get("text", "")), voice, float(body.get("speed") or 1.0))
+        except Exception as exc:  # noqa: BLE001
+            print(f"[tts] error: {exc}", flush=True)
+            return self._send(500, {"error": str(exc)})
+        print(f"[tts] {int((time.time() - t0) * 1000)}ms {len(wav) // 1024}KB", flush=True)
+        self.send_response(200)
+        self.send_header("Content-Type", "audio/wav")
+        self.send_header("Content-Length", str(len(wav)))
+        self.end_headers()
+        self.wfile.write(wav)
+
     def log_message(self, *_args) -> None:  # 不印每個請求
         pass
 
@@ -167,6 +268,7 @@ def main() -> None:
     except Exception:  # noqa: BLE001
         pass
     threading.Thread(target=load_model, daemon=True).start()
+    threading.Thread(target=load_tts, daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"[stt] listening on http://{HOST}:{PORT} (model {MODEL} loading…)", flush=True)
     server.serve_forever()

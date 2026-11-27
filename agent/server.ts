@@ -92,6 +92,26 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
     const r = await fetch(`${STT}/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.json()).catch(() => null);
     return send(res, 200, { ok: !!r?.ready, device: r?.device ?? '', loading: !!r && !r.ready });
   }
+  // HEX 說話：文字 → 本機 Kokoro 語音（WAV）
+  if (path === '/api/speak' && req.method === 'POST') {
+    const body = await readJson(req, 5000);
+    const text = String(body.text ?? '').slice(0, 400);
+    if (!text.trim()) return send(res, 400, { ok: false, error: 'empty' });
+    try {
+      const r = await fetch(`${STT}/speak`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-HEX': '1' },
+        body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!r.ok) return send(res, 200, { ok: false, error: `tts ${r.status}` });
+      const wav = Buffer.from(await r.arrayBuffer());
+      res.writeHead(200, { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-store' });
+      return res.end(wav);
+    } catch {
+      return send(res, 200, { ok: false, error: 'offline' });
+    }
+  }
   if (path === '/api/stt' && req.method === 'POST') {
     const chunks: Buffer[] = [];
     let size = 0;
