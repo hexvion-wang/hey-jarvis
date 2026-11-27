@@ -9,6 +9,7 @@ import { DeskLink } from '../shared/link';
 import { OneEuro } from '../phone/gestures';
 import { ClapDetector } from './clap';
 import { VoiceInput } from './voice';
+import { Swords } from './swords';
 
 document.getElementById('ver')!.textContent = BUILD_ID;
 ensureLatest();
@@ -89,6 +90,9 @@ const STAGES: Stage[] = ['standby', 'console', 'holo'];
 let stage: Stage = 'standby';
 /** 等目前的收合動畫跑完，才打開下一段 */
 let pending: Stage | null = null;
+/** 萬劍歸宗：喚醒動畫／回待機時的散開 */
+const swords = new Swords();
+let scatterPending = false;
 let lastActivity = performance.now();
 
 function setStateLabel() {
@@ -100,6 +104,13 @@ export function goStage(next: Stage) {
   if (next === stage) return;
   const t = performance.now();
   lastActivity = t;
+  // 從待機叫醒：先播萬劍歸宗，聚成核心後才展開主控台
+  if (stage === 'standby') {
+    swords.gather(t);
+    scatterPending = false;
+  }
+  // 回待機：等主控台／選單收合完，核心散成萬劍飛走
+  if (next === 'standby') scatterPending = true;
   if (stage === 'console') hexConsole.close(t);
   if (stage === 'holo') {
     menu.close(t);
@@ -191,6 +202,8 @@ const HOVER_GRACE_MS = 400;
 export function pressAt(x: number, y: number, fromGesture = false) {
   const t = performance.now();
   lastActivity = t;
+  // 萬劍歸宗播放中：點一下跳過
+  if (swords.busy && stage !== 'standby') return swords.skip(t);
   // 手勢點到面板：按鈕就執行，其他地方開始拖曳（滑鼠由面板自己處理）
   if (fromGesture && panels.pressAt(x, y)) return;
   // 手勢點到畫面上的按鈕（例如 AR 鏡頭開關）
@@ -514,7 +527,11 @@ function loop() {
   if (stage === 'console' && t - lastActivity > IDLE_CONSOLE_MS) goStage('standby');
 
   // 上一段收合完成後才展開下一段
-  if (pending && hexConsole.state !== 'closing' && menu.state !== 'closing') {
+  if (scatterPending && stage === 'standby' && hexConsole.state === 'hidden' && menu.state !== 'closing') {
+    swords.scatter(t);
+    scatterPending = false;
+  }
+  if (pending && swords.ready(t) && hexConsole.state !== 'closing' && menu.state !== 'closing') {
     if (pending === 'console') hexConsole.open(t);
     if (pending === 'holo') menu.open(t);
     pending = null;
@@ -526,8 +543,9 @@ function loop() {
     cursor = null;
     cursorFromHand = false;
   }
-  const hovered = menu.draw(ctx, t, cursor, dt, { core: !hexConsole.visible });
+  const hovered = menu.draw(ctx, t, cursor, dt, { core: !hexConsole.visible && swords.coreVisible(t) });
   hexConsole.draw(ctx, t, dt, menu.coreR);
+  swords.draw(ctx, t, W, H, menu.coreR);
   if (hovered && !(cursorFromHand && handPinch)) lastHover = { app: hovered, t };
   panels.hoverAt(cursorFromHand ? cursor : null);
   panels.tick();
