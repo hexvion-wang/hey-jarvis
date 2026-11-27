@@ -2,7 +2,7 @@ import '../style.css';
 import { startCamera, CameraError } from './camera';
 import { createTracker, type Tracker } from './tracker';
 import type { Viewport } from './coords';
-import { GestureTracker, ClaspDetector } from './gestures';
+import { GestureTracker } from './gestures';
 import type { HandLandmarkerResult } from '@mediapipe/tasks-vision';
 import { drawHand } from '../hud/skeleton';
 import { drawCursor } from '../hud/cursor';
@@ -126,7 +126,6 @@ let fpsWindowStart = performance.now();
 let lastDraw = performance.now();
 let result: HandLandmarkerResult | null = null;
 const gestures = new GestureTracker();
-const clasp = new ClaspDetector();
 
 function loop() {
   requestAnimationFrame(loop);
@@ -146,17 +145,10 @@ function loop() {
       link.send({ type: 'hand', ok: g.hasHand, x: g.raw.x, y: g.raw.y, open: g.open, pose: g.pose });
       if (g.pinchStart) link.send({ type: 'pinch', down: true });
       if (g.pinchEnd) link.send({ type: 'pinch', down: false });
-      // 雙手合十：叫電腦上的 HEX 回到待機
-      if (clasp.update(vp, result.landmarks, now)) {
-        link.send({ type: 'clasp' });
-        showBanner('🙏 HEX 回到待機', 2000);
-      }
     } else if (g.pinchStart && g.clickPos) {
       press(g.clickPos.x, g.clickPos.y, now, true);
     }
-    gestureEl.textContent = clasp.progress > 0
-      ? `CLASP ${Math.round(clasp.progress * 100)}%`
-      : g.hasHand ? `${g.pinching ? 'PINCH' : g.pose.toUpperCase()} ${g.ratio.toFixed(2)}` : 'NO HAND';
+    gestureEl.textContent = g.hasHand ? `${g.pinching ? 'PINCH' : g.pose.toUpperCase()} ${g.ratio.toFixed(2)}` : 'NO HAND';
     gestureEl.classList.toggle('pinch', g.pinching);
 
     frames++;

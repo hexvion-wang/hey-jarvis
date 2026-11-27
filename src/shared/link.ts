@@ -13,7 +13,6 @@ export type LinkMsg =
   | { type: 'core' } // 手機捏了中間的核心 → 請電腦醒來
   | { type: 'hand'; ok: boolean; x: number; y: number; open?: boolean; pose?: string } // 手的位置（0~1，已鏡像）、是否五指張開
   | { type: 'pinch'; down: boolean } // 捏下 / 放開
-  | { type: 'clasp' } // 雙手合十：回到待機
   | { type: 'video'; on: boolean }; // 電腦請手機開始／停止傳鏡頭畫面
 
 export type LinkState = 'idle' | 'waiting' | 'connecting' | 'connected' | 'error';
