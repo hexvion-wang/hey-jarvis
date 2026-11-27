@@ -125,8 +125,9 @@ const speech = new HexSpeech(
 );
 function greet() {
   const h = new Date().getHours();
-  const hi = h < 5 ? '夜深了' : h < 11 ? '早安' : h < 14 ? '午安' : h < 18 ? '下午好' : '晚安';
-  speech.say(`${hi}，歡迎回來。HEX 系統已上線。`);
+  // 英文招呼（參考展示影片裡的「Welcome home, sir.」）
+  const hi = h < 5 ? 'Up late again, sir.' : h < 12 ? 'Good morning, sir.' : h < 18 ? 'Good afternoon, sir.' : 'Good evening, sir.';
+  speech.say(`${hi} Welcome home. HEX is online.`);
 }
 let scatterPending = false;
 let lastActivity = performance.now();

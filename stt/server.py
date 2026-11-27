@@ -102,10 +102,13 @@ _MD = re.compile(r"(\*\*|__|`+|^#+\s*|^\s*[-*•]\s+|^\s*\d+\.\s+|\[\[[^\]]*\]\]
 _EMOJI = re.compile("[\U0001F000-\U0001FFFF\u2600-\u27BF\uFE0F]")
 
 
+_CJK = re.compile(r"[㐀-鿿豈-﫿]")
+
+
 def clean_for_speech(text: str) -> str:
     text = _MD.sub("", text)
     text = _EMOJI.sub("", text)
-    text = re.sub(r"\s*\n+\s*", "。", text.strip())
+    text = re.sub(r"\s*\n+\s*", "。" if _CJK.search(text) else ". ", text.strip())
     text = re.sub(r"[。]{2,}", "。", text)
     return text[:400]
 
@@ -121,7 +124,11 @@ def synth(text: str, voice: str = TTS_VOICE, speed: float = 1.0) -> bytes:
     if not text:
         return b""
     with tts_lock:
-        phonemes, _ = g2p(text)
+        if _CJK.search(text):
+            phonemes, _ = g2p(text)
+        else:
+            # 整句都是英文（例如喚醒時的英文招呼）：直接用英式英文發音，比較有 Jarvis 的味道
+            phonemes = k.tokenizer.phonemize(text, lang="en-gb")
         samples, sr = k.create(phonemes, voice=voice, speed=speed, is_phonemes=True)
     pcm = (np.clip(samples, -1, 1) * 32767).astype("<i2")
     buf = io.BytesIO()
