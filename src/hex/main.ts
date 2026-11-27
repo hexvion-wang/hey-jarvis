@@ -99,6 +99,8 @@ function toast(text: string, ms = 2500) {
 type Stage = 'standby' | 'console' | 'holo';
 const STAGES: Stage[] = ['standby', 'console', 'holo'];
 let stage: Stage = 'standby';
+/** 最近一次換段的時間（剛換段時不理合十，避免一進去就被彈回待機） */
+let stageAt = -1e9;
 /** 等目前的收合動畫跑完，才打開下一段 */
 let pending: Stage | null = null;
 /** 萬劍歸宗：喚醒動畫／回待機時的散開 */
@@ -153,6 +155,7 @@ export function goStage(next: Stage) {
     panels.closeAll();
   }
   stage = next;
+  stageAt = t;
   pending = next === 'standby' ? null : next;
   if (next === 'console') refreshDaily();
   if (next === 'holo') chatInHolo = false; // 每次進全息模式都先關著
@@ -515,7 +518,7 @@ const link = new DeskLink({
       while (handHistory.length && t - handHistory[0].t > 300) handHistory.shift();
     } else if (msg.type === 'clasp') {
       // 雙手合十：回到待機（核心散成萬劍飛走、變回藍色）
-      if (stage !== 'standby') {
+      if (stage !== 'standby' && !swords.capturing && t - stageAt > 3000) {
         speech.say('好的，HEX 進入待機。');
         goStage('standby');
         toast('🙏 回到待機');

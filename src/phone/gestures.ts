@@ -186,15 +186,19 @@ export class GestureTracker {
 }
 
 /**
- * 雙手合十（手指交扣、兩手掌貼在一起），持續約 0.5 秒 → 觸發一次；分開後才能再觸發。
- * 兩手交扣時常常會被認成「一隻手」，所以兩種情況都算：
- * - 認到兩隻手，而且兩個手掌中心很近
- * - 剛剛才看到兩隻手靠在一起，接著變成一隻手，而且這隻手就在剛才兩手中間（兩手合成一團）
+ * 雙手合十（手指交扣、兩手掌貼在一起），持續約 0.5 秒 → 觸發一次。
+ * 防誤觸：
+ * - 要先看到「兩隻手分開」（3 秒內），合起來才算；只有一隻手在操作時永遠不會觸發
+ * - MediaPipe 偶爾會把同一隻手認成兩隻（21 個點幾乎重疊），這種不算兩隻手
+ * - 觸發後要再看到兩手分開才能再觸發
+ * 兩手交扣時常常會被認成「一隻手」：剛剛（1.2 秒內）真的看到兩隻手靠在一起，接著變成一隻手、而且就在兩手中間，也算合十中。
  */
 export class ClaspDetector {
   private since = 0;
   private lastSeen = 0;
-  private armed = true;
+  /** 最近一次看到兩隻手分開的時間；觸發的時間 */
+  private apartT = -1e9;
+  private firedT = -1e9;
   /** 最近一次「兩隻手靠近」的時間、位置與手掌大小 */
   private pairT = -1e9;
   private pairMid = { x: 0, y: 0 };
@@ -211,44 +215,53 @@ export class ClaspDetector {
       return { x: p.reduce((s, v) => s + v.x, 0) / 5, y: p.reduce((s, v) => s + v.y, 0) / 5 };
     };
     const size = (h: NormalizedLandmark[]) => Math.hypot(px(h, 0).x - px(h, 9).x, px(h, 0).y - px(h, 9).y) || 1;
+    /** 兩組點的平均距離（以手掌大小計）；很小代表是同一隻手被認了兩次 */
+    const overlap = (a: NormalizedLandmark[], b: NormalizedLandmark[], palm: number) => {
+      let sum = 0;
+      for (let i = 0; i < 21; i++) {
+        const p = px(a, i);
+        const q = px(b, i);
+        sum += Math.hypot(p.x - q.x, p.y - q.y);
+      }
+      return sum / 21 / palm;
+    };
+
+    // 重複認到的同一隻手只留一隻
+    let list = hands;
+    if (hands.length >= 2) {
+      const palm = (size(hands[0]) + size(hands[1])) / 2;
+      if (overlap(hands[0], hands[1], palm) < 0.35) list = [hands[0]];
+    }
 
     let close = false;
-    if (hands.length >= 2) {
-      const a = center(hands[0]);
-      const b = center(hands[1]);
-      const palm = (size(hands[0]) + size(hands[1])) / 2;
+    if (list.length >= 2) {
+      const a = center(list[0]);
+      const b = center(list[1]);
+      const palm = (size(list[0]) + size(list[1])) / 2;
       const d = Math.hypot(a.x - b.x, a.y - b.y) / palm;
+      if (d > 1.8) this.apartT = t;
       if (d < 1.4) {
         this.pairT = t;
         this.pairMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
         this.palm = palm;
       }
       close = d < 1.1;
-      if (d > 1.8) this.armed = true; // 分得夠開才重新啟用
-    } else if (hands.length === 1) {
-      // 兩手合成一團：剛剛（0.9 秒內）兩手還靠在一起，或已經在合十中，而且這隻「手」就在兩手中間
-      const c = center(hands[0]);
-      const near = Math.hypot(c.x - this.pairMid.x, c.y - this.pairMid.y) / this.palm < 1.2;
-      if (near && (t - this.pairT < 900 || this.since)) {
-        close = true;
-        // 跟著那一團移動一點點
-        this.pairMid = { x: this.pairMid.x * 0.8 + c.x * 0.2, y: this.pairMid.y * 0.8 + c.y * 0.2 };
-      }
-      if (!near) this.armed = true;
-    } else if (t - this.lastSeen > 600) {
-      this.armed = true; // 手都放下了
+    } else if (list.length === 1 && t - this.pairT < 1200) {
+      const c = center(list[0]);
+      close = Math.hypot(c.x - this.pairMid.x, c.y - this.pairMid.y) / this.palm < 1.2;
     }
 
-    if (close) {
+    // 能不能觸發：3 秒內看過兩手分開，而且那之後還沒觸發過
+    const armed = t - this.apartT < 3000 && this.apartT > this.firedT;
+    if (close && armed) {
       this.lastSeen = t;
-      // 觸發過、還沒分開之前不重新計時（不然一分開就會又觸發一次）
-      if (!this.since && this.armed) this.since = t;
-    } else if (t - this.lastSeen > 200) {
+      if (!this.since) this.since = t;
+    } else if (!armed || t - this.lastSeen > 200) {
       this.since = 0; // 偶爾一兩幀沒抓到不算放開
     }
-    this.progress = this.since && this.armed ? Math.min(1, (t - this.since) / this.holdMs) : 0;
-    if (this.armed && this.since && t - this.since >= this.holdMs) {
-      this.armed = false;
+    this.progress = this.since ? Math.min(1, (t - this.since) / this.holdMs) : 0;
+    if (this.since && t - this.since >= this.holdMs) {
+      this.firedT = t;
       this.since = 0;
       this.progress = 0;
       return true;
