@@ -3,7 +3,8 @@
  * 面板之間用電路折線連到核心。純 Canvas 繪製。
  */
 
-const CYAN = '0, 229, 255';
+
+import { hexColor } from './theme';
 const GOLD = '255, 201, 64';
 const GREEN = '125, 255, 176';
 const RED = '255, 90, 90';
@@ -125,7 +126,7 @@ export class HexConsole {
   private drawCore(ctx: CanvasRenderingContext2D, t: number, R: number, k: number) {
     const { cx, cy } = this;
     ctx.save();
-    ctx.shadowColor = `rgb(${CYAN})`;
+    ctx.shadowColor = `rgb(${hexColor.rgb})`;
     ctx.shadowBlur = 18;
 
     // 外圈刻度
@@ -135,7 +136,7 @@ export class HexConsole {
       const long = i % 15 === 0;
       const r1 = R * 1.08;
       const r2 = R * (long ? 1.17 : 1.12);
-      ctx.strokeStyle = long ? `rgba(${GOLD}, ${0.8 * k})` : `rgba(${CYAN}, ${0.4 * k})`;
+      ctx.strokeStyle = long ? `rgba(${GOLD}, ${0.8 * k})` : `rgba(${hexColor.rgb}, ${0.4 * k})`;
       ctx.beginPath();
       ctx.moveTo(cx + Math.cos(ang) * r1, cy + Math.sin(ang) * r1);
       ctx.lineTo(cx + Math.cos(ang) * r2, cy + Math.sin(ang) * r2);
@@ -152,7 +153,7 @@ export class HexConsole {
     ];
     for (const [m, sp, n, len, w] of rings) {
       ctx.lineWidth = w;
-      ctx.strokeStyle = `rgba(${CYAN}, ${0.35 + 0.5 * k})`;
+      ctx.strokeStyle = `rgba(${hexColor.rgb}, ${0.35 + 0.5 * k})`;
       for (let i = 0; i < n; i++) {
         const s = t * sp + (i * Math.PI * 2) / n;
         ctx.beginPath();
@@ -165,8 +166,8 @@ export class HexConsole {
     const pulse = 0.5 + 0.5 * Math.sin(t / 300);
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.5);
     g.addColorStop(0, `rgba(230, 255, 255, ${0.6 + 0.3 * pulse})`);
-    g.addColorStop(0.5, `rgba(${CYAN}, 0.35)`);
-    g.addColorStop(1, `rgba(${CYAN}, 0)`);
+    g.addColorStop(0.5, `rgba(${hexColor.rgb}, 0.35)`);
+    g.addColorStop(1, `rgba(${hexColor.rgb}, 0)`);
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(cx, cy, R * 0.5, 0, Math.PI * 2);
@@ -181,12 +182,12 @@ export class HexConsole {
       else ctx.moveTo(px, py);
     }
     ctx.closePath();
-    ctx.strokeStyle = `rgba(${CYAN}, 0.95)`;
+    ctx.strokeStyle = `rgba(${hexColor.rgb}, 0.95)`;
     ctx.lineWidth = 2.5;
     ctx.stroke();
 
     ctx.shadowBlur = 0;
-    ctx.fillStyle = '#00303d';
+    ctx.fillStyle = hexColor.dark;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = `800 ${Math.round(R * 0.16)}px ${MONO}`;
@@ -220,14 +221,14 @@ export class HexConsole {
     if (k <= 0) return;
     ctx.save();
     ctx.lineWidth = 1.5;
-    ctx.shadowColor = `rgb(${CYAN})`;
+    ctx.shadowColor = `rgb(${hexColor.rgb})`;
     ctx.shadowBlur = 6;
     for (const [pi, path] of this.circuitPaths().entries()) {
       // 依進度畫出部分路徑
       const segs = path.slice(1).map((p, i) => Math.hypot(p[0] - path[i][0], p[1] - path[i][1]));
       const total = segs.reduce((s, v) => s + v, 0);
       let remain = total * k;
-      ctx.strokeStyle = `rgba(${CYAN}, 0.45)`;
+      ctx.strokeStyle = `rgba(${hexColor.rgb}, 0.45)`;
       ctx.beginPath();
       ctx.moveTo(path[0][0], path[0][1]);
       for (let i = 0; i < segs.length && remain > 0; i++) {
@@ -237,7 +238,7 @@ export class HexConsole {
       }
       ctx.stroke();
       // 轉折點的小方塊
-      ctx.fillStyle = `rgba(${CYAN}, ${0.8 * k})`;
+      ctx.fillStyle = `rgba(${hexColor.rgb}, ${0.8 * k})`;
       for (const p of path.slice(1, -1)) ctx.fillRect(p[0] - 2.5, p[1] - 2.5, 5, 5);
 
       // 沿線跑的光點
@@ -253,7 +254,7 @@ export class HexConsole {
             ctx.beginPath();
             ctx.arc(x, y, 2.5, 0, Math.PI * 2);
             ctx.fill();
-            ctx.shadowColor = `rgb(${CYAN})`;
+            ctx.shadowColor = `rgb(${hexColor.rgb})`;
             break;
           }
           d -= segs[i];
@@ -270,16 +271,16 @@ export class HexConsole {
     ctx.save();
     ctx.globalAlpha = k;
     ctx.fillStyle = 'rgba(0, 18, 30, 0.6)';
-    ctx.strokeStyle = `rgba(${CYAN}, 0.45)`;
+    ctx.strokeStyle = `rgba(${hexColor.rgb}, 0.45)`;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.roundRect(r.x, r.y, r.w, h, 8);
     ctx.fill();
     ctx.stroke();
     // 四角加粗
-    ctx.strokeStyle = `rgb(${CYAN})`;
+    ctx.strokeStyle = `rgb(${hexColor.rgb})`;
     ctx.lineWidth = 2.5;
-    ctx.shadowColor = `rgb(${CYAN})`;
+    ctx.shadowColor = `rgb(${hexColor.rgb})`;
     ctx.shadowBlur = 8;
     const c = 16;
     for (const [x, y, sx, sy] of [
@@ -296,12 +297,12 @@ export class HexConsole {
     }
     // 標題列
     ctx.shadowBlur = 6;
-    ctx.fillStyle = `rgb(${CYAN})`;
+    ctx.fillStyle = `rgb(${hexColor.rgb})`;
     ctx.font = `700 13px ${MONO}`;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.fillText(title, r.x + 16, r.y + 20);
-    ctx.fillStyle = `rgba(${CYAN}, 0.25)`;
+    ctx.fillStyle = `rgba(${hexColor.rgb}, 0.25)`;
     ctx.fillRect(r.x + 16, r.y + 34, r.w - 32, 1);
     ctx.restore();
     // 之後的內容只畫在已展開的範圍內
@@ -330,7 +331,7 @@ export class HexConsole {
     ctx.font = `12px ${MONO}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = `rgba(${CYAN}, 0.75)`;
+    ctx.fillStyle = `rgba(${hexColor.rgb}, 0.75)`;
     const lines = s
       ? [
           `${s.cpu.model.replace(/\(R\)|\(TM\)|CPU/g, '').replace(/\s+/g, ' ').trim()} · ${s.cpu.cores} 執行緒`,
@@ -363,11 +364,11 @@ export class HexConsole {
     const start = Math.PI * 0.75;
     const sweep = Math.PI * 1.5;
     const hot = isTemp ? value >= 75 : value >= 85;
-    const rgb = hot ? RED : value >= (isTemp ? 60 : 60) ? GOLD : CYAN;
+    const rgb = hot ? RED : value >= (isTemp ? 60 : 60) ? GOLD : hexColor.rgb;
     ctx.save();
     ctx.lineCap = 'round';
     // 底軌
-    ctx.strokeStyle = `rgba(${CYAN}, 0.15)`;
+    ctx.strokeStyle = `rgba(${hexColor.rgb}, 0.15)`;
     ctx.lineWidth = 6;
     ctx.beginPath();
     ctx.arc(x, y, r, start, start + sweep);
@@ -383,7 +384,7 @@ export class HexConsole {
     ctx.shadowBlur = 0;
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 6]);
-    ctx.strokeStyle = `rgba(${CYAN}, 0.35)`;
+    ctx.strokeStyle = `rgba(${hexColor.rgb}, 0.35)`;
     ctx.beginPath();
     ctx.arc(x, y, r * 0.72, t * 0.001, t * 0.001 + Math.PI * 2);
     ctx.stroke();
@@ -397,7 +398,7 @@ export class HexConsole {
     ctx.font = `700 ${Math.round(r * 0.42)}px ${MONO}`;
     ctx.fillText(text, x, y);
     ctx.shadowBlur = 0;
-    ctx.fillStyle = `rgba(${CYAN}, 0.8)`;
+    ctx.fillStyle = `rgba(${hexColor.rgb}, 0.8)`;
     ctx.font = `600 11px ${MONO}`;
     ctx.fillText(label, x, y + r + 16);
     ctx.restore();
@@ -413,19 +414,19 @@ export class HexConsole {
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = `rgb(${CYAN})`;
-    ctx.shadowColor = `rgb(${CYAN})`;
+    ctx.fillStyle = `rgb(${hexColor.rgb})`;
+    ctx.shadowColor = `rgb(${hexColor.rgb})`;
     ctx.shadowBlur = 10;
     ctx.font = `700 40px ${MONO}`;
     ctx.fillText(now.toLocaleTimeString('zh-TW', { hour12: false }), x, y);
     ctx.shadowBlur = 0;
     y += 24;
     ctx.font = `14px ${SANS}`;
-    ctx.fillStyle = `rgba(${CYAN}, 0.8)`;
+    ctx.fillStyle = `rgba(${hexColor.rgb}, 0.8)`;
     ctx.fillText(now.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }), x, y);
 
     y += 22;
-    ctx.fillStyle = `rgba(${CYAN}, 0.25)`;
+    ctx.fillStyle = `rgba(${hexColor.rgb}, 0.25)`;
     ctx.fillRect(x, y, r.w - 36, 1);
     y += 26;
 
@@ -436,7 +437,7 @@ export class HexConsole {
     y += 22;
     if (!d) {
       ctx.font = `13px ${SANS}`;
-      ctx.fillStyle = `rgba(${CYAN}, 0.7)`;
+      ctx.fillStyle = `rgba(${hexColor.rgb}, 0.7)`;
       ctx.fillText(this.demo ? '需要本機 agent 才能讀取日報' : '讀取中…', x, y);
       ctx.restore();
       return;
@@ -455,7 +456,7 @@ export class HexConsole {
     ctx.fillStyle = `rgb(${vRgb})`;
     ctx.fillText(vText, x + 10, y + 1);
     ctx.font = `13px ${SANS}`;
-    ctx.fillStyle = `rgba(${CYAN}, 0.75)`;
+    ctx.fillStyle = `rgba(${hexColor.rgb}, 0.75)`;
     ctx.fillText(`${d.date}${d.fallback ? '（今天的還沒產生，顯示最新一份）' : ''}`, x + vw + 10, y + 1);
     y += 28;
 
@@ -481,19 +482,19 @@ export class HexConsole {
     const r = this.wave;
     ctx.save();
     ctx.globalAlpha = k;
-    ctx.strokeStyle = `rgba(${CYAN}, 0.35)`;
+    ctx.strokeStyle = `rgba(${hexColor.rgb}, 0.35)`;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.roundRect(r.x, r.y, r.w, r.h, r.h / 2);
     ctx.stroke();
     const mid = r.y + r.h / 2;
-    ctx.shadowColor = `rgb(${CYAN})`;
+    ctx.shadowColor = `rgb(${hexColor.rgb})`;
     ctx.shadowBlur = 10;
     for (const [amp, sp, al] of [
       [0.32, 0.004, 0.9],
       [0.2, -0.006, 0.5],
     ] as const) {
-      ctx.strokeStyle = `rgba(${CYAN}, ${al})`;
+      ctx.strokeStyle = `rgba(${hexColor.rgb}, ${al})`;
       ctx.lineWidth = 2;
       ctx.beginPath();
       for (let i = 0; i <= 100; i++) {
@@ -506,7 +507,7 @@ export class HexConsole {
       ctx.stroke();
     }
     ctx.shadowBlur = 0;
-    ctx.fillStyle = `rgba(${CYAN}, 0.8)`;
+    ctx.fillStyle = `rgba(${hexColor.rgb}, 0.8)`;
     ctx.font = `600 11px ${MONO}`;
     ctx.textAlign = 'center';
     ctx.fillText('STANDBY FOR COMMAND · 等待指令', this.cx, r.y + r.h + 18);

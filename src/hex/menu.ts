@@ -2,9 +2,10 @@
  * HEX 全息選單：待機核心 → 螺旋展開成環 → 收成底部 Dock → 收回。
  * 純 Canvas 繪製，時間單位都是 performance.now() 的毫秒。
  */
+import { hexColor } from './theme';
 import { APPS, GROUPS, PANELS, type AppDef, type GroupId } from './apps';
 
-const CYAN = '0, 229, 255';
+
 const GOLD = '255, 201, 64';
 export const OPEN_MS = 5200;
 export const CLOSE_MS = 1000;
@@ -59,6 +60,7 @@ export class HexMenu {
   /** 待機核心半徑 */
   coreR = 40;
   private grid: HTMLCanvasElement | null = null;
+  private gridRgb = '';
   /** Dock 上節點半徑、核心在 Dock 的位置、Dock 弧線參數 */
   private rd = 26;
   private dockCore = { x: 0, y: 0 };
@@ -278,14 +280,17 @@ export class HexMenu {
 
   // ---- 背景：六角形格線（HEX） ----
   private drawGrid(ctx: CanvasRenderingContext2D, alpha: number) {
+    // 主色換了（藍 ↔ 紅）就重畫格線
+    if (this.gridRgb !== hexColor.rgb) this.grid = null;
     if (!this.grid) {
+      this.gridRgb = hexColor.rgb;
       const g = document.createElement('canvas');
       g.width = this.W;
       g.height = this.H;
       const c = g.getContext('2d')!;
       const s = 26;
       const h = s * Math.sqrt(3);
-      c.strokeStyle = `rgba(${CYAN}, 0.07)`;
+      c.strokeStyle = `rgba(${hexColor.rgb}, 0.07)`;
       c.lineWidth = 1;
       for (let row = -1; row * h * 0.5 < this.H + h; row++) {
         for (let col = -1; col * s * 3 < this.W + s * 3; col++) {
@@ -323,12 +328,12 @@ export class HexMenu {
     const { x: cx, y: cy, r: R } = this.core;
     const power = 0.3 + open * 0.7;
     ctx.save();
-    ctx.shadowColor = `rgb(${CYAN})`;
+    ctx.shadowColor = `rgb(${hexColor.rgb})`;
     ctx.shadowBlur = 10 + open * 25;
 
     // 外圈三段旋轉弧
     ctx.lineWidth = Math.max(2, R * 0.07);
-    ctx.strokeStyle = `rgba(${CYAN}, ${0.35 + power * 0.5})`;
+    ctx.strokeStyle = `rgba(${hexColor.rgb}, ${0.35 + power * 0.5})`;
     for (let i = 0; i < 3; i++) {
       const a = t * (0.0004 + open * 0.0008) + (i * Math.PI * 2) / 3;
       ctx.beginPath();
@@ -356,16 +361,16 @@ export class HexMenu {
     ctx.closePath();
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.5);
     g.addColorStop(0, `rgba(220, 255, 255, ${0.5 + pulse * 0.4 * power})`);
-    g.addColorStop(1, `rgba(${CYAN}, ${0.15 + power * 0.25})`);
+    g.addColorStop(1, `rgba(${hexColor.rgb}, ${0.15 + power * 0.25})`);
     ctx.fillStyle = g;
     ctx.fill();
-    ctx.strokeStyle = `rgba(${CYAN}, 0.9)`;
+    ctx.strokeStyle = `rgba(${hexColor.rgb}, 0.9)`;
     ctx.lineWidth = 2;
     ctx.stroke();
 
     // 深色字壓在發亮的核心上比較清楚
     ctx.shadowBlur = 0;
-    ctx.fillStyle = '#00303d';
+    ctx.fillStyle = hexColor.dark;
     ctx.font = `800 ${Math.max(9, Math.round(R * 0.26))}px ui-monospace, Consolas, monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -376,7 +381,7 @@ export class HexMenu {
   // ---- 展開瞬間的衝擊波 ----
   private drawShockwave(ctx: CanvasRenderingContext2D, e: number) {
     ctx.save();
-    ctx.shadowColor = `rgb(${CYAN})`;
+    ctx.shadowColor = `rgb(${hexColor.rgb})`;
     ctx.shadowBlur = 20;
     for (const [delay, dur, maxR, w] of [
       [0, 1500, 1.35, 4],
@@ -387,7 +392,7 @@ export class HexMenu {
       if (k <= 0 || k >= 1) continue;
       ctx.beginPath();
       ctx.arc(this.cx, this.cy, this.coreR + easeOut(k) * this.R * maxR, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(${CYAN}, ${0.9 * (1 - k)})`;
+      ctx.strokeStyle = `rgba(${hexColor.rgb}, ${0.9 * (1 - k)})`;
       ctx.lineWidth = w;
       ctx.stroke();
     }
@@ -409,14 +414,14 @@ export class HexMenu {
     const { cx, cy, R } = this;
     ctx.save();
     ctx.globalAlpha = Math.min(1, open * 1.5);
-    ctx.shadowColor = `rgb(${CYAN})`;
+    ctx.shadowColor = `rgb(${hexColor.rgb})`;
     ctx.shadowBlur = 8;
 
     // 主環：從正上方開始畫一圈
     const sweep = easeOut(open) * Math.PI * 2;
     ctx.beginPath();
     ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + sweep);
-    ctx.strokeStyle = `rgba(${CYAN}, 0.35)`;
+    ctx.strokeStyle = `rgba(${hexColor.rgb}, 0.35)`;
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
@@ -424,7 +429,7 @@ export class HexMenu {
     ctx.setLineDash([4, 10]);
     ctx.beginPath();
     ctx.arc(cx, cy, R * 0.62, t * 0.0002, t * 0.0002 + sweep);
-    ctx.strokeStyle = `rgba(${CYAN}, ${0.3 * open})`;
+    ctx.strokeStyle = `rgba(${hexColor.rgb}, ${0.3 * open})`;
     ctx.stroke();
     ctx.setLineDash([]);
 
@@ -439,7 +444,7 @@ export class HexMenu {
       ctx.beginPath();
       ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
       ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
-      ctx.strokeStyle = i < lit ? (long ? `rgba(${GOLD}, 0.8)` : `rgba(${CYAN}, 0.55)`) : `rgba(${CYAN}, 0.08)`;
+      ctx.strokeStyle = i < lit ? (long ? `rgba(${GOLD}, 0.8)` : `rgba(${hexColor.rgb}, 0.55)`) : `rgba(${hexColor.rgb}, 0.08)`;
       ctx.lineWidth = long ? 2.5 : 1.2;
       ctx.stroke();
     }
@@ -448,9 +453,9 @@ export class HexMenu {
     if (this.state === 'open') {
       const a = t * 0.0012;
       const g = ctx.createConicGradient(a - 0.6, cx, cy);
-      g.addColorStop(0, `rgba(${CYAN}, 0)`);
-      g.addColorStop(0.095, `rgba(${CYAN}, 0.10)`);
-      g.addColorStop(0.0955, `rgba(${CYAN}, 0)`);
+      g.addColorStop(0, `rgba(${hexColor.rgb}, 0)`);
+      g.addColorStop(0.095, `rgba(${hexColor.rgb}, 0.10)`);
+      g.addColorStop(0.0955, `rgba(${hexColor.rgb}, 0)`);
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(cx, cy, R * 0.95, 0, Math.PI * 2);
@@ -471,9 +476,9 @@ export class HexMenu {
     };
     ctx.save();
     ctx.globalAlpha = easeOut(k);
-    ctx.shadowColor = `rgb(${CYAN})`;
+    ctx.shadowColor = `rgb(${hexColor.rgb})`;
     ctx.shadowBlur = 10;
-    ctx.strokeStyle = `rgba(${CYAN}, 0.5)`;
+    ctx.strokeStyle = `rgba(${hexColor.rgb}, 0.5)`;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i <= 80; i++) {
@@ -537,8 +542,8 @@ export class HexMenu {
     n.hover += ((hovered ? 1 : 0) - n.hover) * Math.min(1, dt / 90);
     const flash = clamp01(1 - (t - n.flashT) / 700);
     const r = baseR * (1 + n.hover * 0.18 + flash * 0.1);
-    const idle = n.panel ? GOLD : CYAN;
-    const rgb = n.hover > 0.5 || flash > 0 ? (n.panel ? CYAN : GOLD) : idle;
+    const idle = n.panel ? GOLD : hexColor.rgb;
+    const rgb = n.hover > 0.5 || flash > 0 ? (n.panel ? hexColor.rgb : GOLD) : idle;
     const dim = n.available ? 1 : 0.35;
     const alpha = Math.min(1, p * 1.5) * dim;
     const lineA = closingDock || n.panel ? 0 : 1 - Math.min(1, dockRaw * 3);
@@ -551,9 +556,9 @@ export class HexMenu {
     if (moving && dist > this.coreR) {
       const tail = 0.5 * (1 - p) + 0.1;
       const tg = ctx.createConicGradient(ang - tail, this.cx, this.cy);
-      tg.addColorStop(0, `rgba(${CYAN}, 0)`);
-      tg.addColorStop(tail / (Math.PI * 2), `rgba(${CYAN}, ${0.7 * (1 - p)})`);
-      tg.addColorStop(Math.min(1, tail / (Math.PI * 2) + 0.001), `rgba(${CYAN}, 0)`);
+      tg.addColorStop(0, `rgba(${hexColor.rgb}, 0)`);
+      tg.addColorStop(tail / (Math.PI * 2), `rgba(${hexColor.rgb}, ${0.7 * (1 - p)})`);
+      tg.addColorStop(Math.min(1, tail / (Math.PI * 2) + 0.001), `rgba(${hexColor.rgb}, 0)`);
       ctx.strokeStyle = tg;
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -569,7 +574,7 @@ export class HexMenu {
       const ex = x - Math.cos(ang) * r;
       const ey = y - Math.sin(ang) * r;
       const lg = ctx.createLinearGradient(lx, ly, ex, ey);
-      lg.addColorStop(0, `rgba(${CYAN}, 0.05)`);
+      lg.addColorStop(0, `rgba(${hexColor.rgb}, 0.05)`);
       lg.addColorStop(1, `rgba(${rgb}, ${0.35 + n.hover * 0.4})`);
       ctx.strokeStyle = lg;
       ctx.lineWidth = 1 + n.hover;

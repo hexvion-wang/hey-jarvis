@@ -69,7 +69,12 @@ export interface GestureState {
   raw: { x: number; y: number };
   /** 五指張開（手掌攤開） */
   open: boolean;
+  /** 手型（穩定 3 幀以上才會改變）：給萬劍歸宗用 */
+  pose: HandPose;
 }
+
+/** open 張開手掌、fist 握拳、sword 劍指（食指＋中指）、rock 🤟（拇指＋食指＋小指）、point 只伸食指 */
+export type HandPose = 'none' | 'open' | 'fist' | 'sword' | 'rock' | 'point' | 'other';
 
 export class GestureTracker {
   private fx = new OneEuro();
@@ -88,7 +93,10 @@ export class GestureTracker {
     ratio: 1,
     raw: { x: 0.5, y: 0.5 },
     open: false,
+    pose: 'none',
   };
+  private poseRaw: HandPose = 'none';
+  private poseFrames = 0;
 
   constructor(public config: GestureConfig = DEFAULT_CONFIG) {}
 
@@ -107,6 +115,8 @@ export class GestureTracker {
       this.history = [];
       s.hasHand = false;
       s.pinching = false;
+      s.pose = 'none';
+      this.poseFrames = 0;
       return s;
     }
     s.hasHand = true;
@@ -125,6 +135,24 @@ export class GestureTracker {
     const fingers = extended(8, 6) && extended(12, 10) && extended(16, 14) && extended(20, 18);
     const thumbOut = dist(px(4), px(5)) / palm > 0.4;
     s.open = fingers && thumbOut && s.ratio > 0.7;
+
+    // ---- 手型：每根手指是伸直還是彎起來 ----
+    const curled = (tip: number, pip: number) => dist(px(tip), w) < dist(px(pip), w) * 1.05;
+    const [iE, mE, pE] = [extended(8, 6), extended(12, 10), extended(20, 18)];
+    const [iC, mC, rC, pC] = [curled(8, 6), curled(12, 10), curled(16, 14), curled(20, 18)];
+    let pose: HandPose = 'other';
+    if (s.open) pose = 'open';
+    else if (iC && mC && rC && pC) pose = 'fist';
+    else if (iE && mE && rC && pC) pose = 'sword';
+    else if (iE && pE && mC && rC) pose = 'rock';
+    else if (iE && mC && rC && pC) pose = 'point';
+    // 連續 3 幀一樣才算數，避免手轉動時一直跳
+    if (pose === this.poseRaw) this.poseFrames++;
+    else {
+      this.poseRaw = pose;
+      this.poseFrames = 1;
+    }
+    if (this.poseFrames >= 3) s.pose = pose;
 
     // ---- 游標：拇指尖與食指尖的中點 ----
     const mid = toScreen(vp, (hand[4].x + hand[8].x) / 2, (hand[4].y + hand[8].y) / 2);

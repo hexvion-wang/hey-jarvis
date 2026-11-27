@@ -11,7 +11,7 @@ export type LinkMsg =
   | { type: 'standby' } // 電腦回到待命
   | { type: 'status'; headline: string; sub?: string } // 電腦畫面上的訊息（指令結果等）
   | { type: 'core' } // 手機捏了中間的核心 → 請電腦醒來
-  | { type: 'hand'; ok: boolean; x: number; y: number; open?: boolean } // 手的位置（0~1，已鏡像）、是否五指張開
+  | { type: 'hand'; ok: boolean; x: number; y: number; open?: boolean; pose?: string } // 手的位置（0~1，已鏡像）、是否五指張開
   | { type: 'pinch'; down: boolean } // 捏下 / 放開
   | { type: 'video'; on: boolean }; // 電腦請手機開始／停止傳鏡頭畫面
 

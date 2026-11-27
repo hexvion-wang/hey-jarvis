@@ -9,7 +9,8 @@ import { DeskLink } from '../shared/link';
 import { OneEuro } from '../phone/gestures';
 import { ClapDetector } from './clap';
 import { VoiceInput } from './voice';
-import { Swords } from './swords';
+import { Swords, type SwordPose } from './swords';
+import { hexColor } from './theme';
 
 document.getElementById('ver')!.textContent = BUILD_ID;
 ensureLatest();
@@ -92,6 +93,8 @@ let stage: Stage = 'standby';
 let pending: Stage | null = null;
 /** 萬劍歸宗：喚醒動畫／回待機時的散開 */
 const swords = new Swords();
+// 化為 HEX 的瞬間：整個介面換成紅色
+swords.onFormed = () => hexColor.set(true);
 let scatterPending = false;
 let lastActivity = performance.now();
 
@@ -386,7 +389,10 @@ async function talk() {
     const text = String(r.text ?? '').trim();
     if (!text) return toast('沒聽清楚，再說一次');
     voiceText.textContent = `「${text}」`;
-    if (stage !== 'holo') goStage('holo');
+    if (stage !== 'holo') {
+      goStage('holo');
+      swords.skip(performance.now()); // 用說的：萬劍直接歸宗，不用等
+    }
     const from = { x: innerWidth / 2, y: innerHeight / 2 };
     setTimeout(() => chat.say(text, from), stage === 'holo' ? 0 : 900);
   } catch {
@@ -403,6 +409,7 @@ const fx = new OneEuro(1.2, 0.006);
 const fy = new OneEuro(1.2, 0.006);
 let handT = 0; // 最後一次收到手的位置
 let handPinch = false;
+let handPose: SwordPose = 'none'; // iPhone 傳來的手型（萬劍歸宗用）
 const handHistory: { x: number; y: number; t: number }[] = [];
 const linkStateEl = $('linkState');
 const linkCodeEl = $('linkCode') as HTMLInputElement;
@@ -424,7 +431,9 @@ const link = new DeskLink({
   onMessage(msg) {
     const t = performance.now();
     if (msg.type === 'hand') {
-      updatePalm(msg.ok && !!msg.open && !handPinch && !panels.dragging, t);
+      handPose = msg.ok ? ((msg.pose as SwordPose) ?? 'none') : 'none';
+      // 萬劍歸宗進行中：張開手掌是「劍環」，不是退回上一段
+      updatePalm(msg.ok && !!msg.open && !handPinch && !panels.dragging && !swords.capturing, t);
       if (!msg.ok) {
         fx.reset();
         fy.reset();
@@ -441,7 +450,7 @@ const link = new DeskLink({
     } else if (msg.type === 'pinch') {
       handPinch = msg.down;
       if (!msg.down) panels.release();
-      if (msg.down) {
+      if (msg.down && !swords.capturing) {
         // 用捏下前約 0.1 秒的位置當點擊點
         const past = handHistory.find((h) => t - h.t <= 120) ?? cursor;
         if (past) pressAt(past.x, past.y, true);
@@ -460,7 +469,7 @@ linkCodeEl.addEventListener('keydown', (e) => {
 /** 手勢游標：青藍準星，捏住時變金色縮小 */
 function drawHandCursor(x: number, y: number, t: number) {
   const pinch = handPinch;
-  const color = pinch ? '#ffc940' : '#00e5ff';
+  const color = pinch ? '#ffc940' : `rgb(${hexColor.rgb})`;
   const r = pinch ? 12 : 20;
   ctx.save();
   ctx.strokeStyle = color;
@@ -530,6 +539,7 @@ function loop() {
   if (scatterPending && stage === 'standby' && hexConsole.state === 'hidden' && menu.state !== 'closing') {
     swords.scatter(t);
     scatterPending = false;
+    hexColor.set(false); // 回到待機：藍色
   }
   if (pending && swords.ready(t) && hexConsole.state !== 'closing' && menu.state !== 'closing') {
     if (pending === 'console') hexConsole.open(t);
@@ -543,8 +553,13 @@ function loop() {
     cursor = null;
     cursorFromHand = false;
   }
-  const hovered = menu.draw(ctx, t, cursor, dt, { core: !hexConsole.visible && swords.coreVisible(t) });
+  const hovered = menu.draw(ctx, t, cursor, dt, { core: !hexConsole.visible && swords.coreVisible() });
   hexConsole.draw(ctx, t, dt, menu.coreR);
+  // 萬劍歸宗：把手勢交給劍群（手離開鏡頭超過 0.6 秒就當作沒有手）
+  if (swords.capturing) {
+    const hand = cursorFromHand && cursor && t - handT < 600 ? { pose: handPose, x: cursor.x, y: cursor.y } : null;
+    swords.control(hand, t);
+  }
   swords.draw(ctx, t, W, H, menu.coreR);
   if (hovered && !(cursorFromHand && handPinch)) lastHover = { app: hovered, t };
   panels.hoverAt(cursorFromHand ? cursor : null);
@@ -556,3 +571,14 @@ function loop() {
   canvas.style.cursor = hovered || overCore ? 'pointer' : 'default';
 }
 requestAnimationFrame(loop);
+
+// ---- 測試用：網址加 ?test 時，可以在主控台用 hexTestHand('fist', x, y) 模擬 iPhone 的手 ----
+if (new URLSearchParams(location.search).has('test')) {
+  (window as unknown as { hexTestHand: unknown }).hexTestHand = (pose: SwordPose, x: number, y: number) => {
+    const t = performance.now();
+    handPose = pose;
+    cursor = { x, y };
+    cursorFromHand = true;
+    handT = t;
+  };
+}
