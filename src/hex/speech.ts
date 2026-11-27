@@ -136,23 +136,23 @@ export class HexSpeech {
     // 「頭盔喇叭」的音色：切掉低頻、提升中高頻，所有濕聲都先經過這裡
     const hp = ctx.createBiquadFilter();
     hp.type = 'highpass';
-    hp.frequency.value = 160;
+    hp.frequency.value = 105;
     const presence = ctx.createBiquadFilter();
     presence.type = 'peaking';
     presence.frequency.value = 2600;
-    presence.gain.value = 5;
+    presence.gain.value = 2.4;
     presence.Q.value = 0.9;
     input.connect(hp).connect(presence);
 
     const dry = ctx.createGain();
-    input.connect(dry).connect(out);
+    presence.connect(dry).connect(out);
 
     // 梳狀濾波（金屬共鳴）
     const comb = ctx.createGain();
     const delay = ctx.createDelay(0.05);
-    delay.delayTime.value = 0.0068;
+    delay.delayTime.value = 0.0105;
     const fb = ctx.createGain();
-    fb.gain.value = 0.55;
+    fb.gain.value = 0.26;
     presence.connect(delay);
     delay.connect(fb).connect(delay);
     delay.connect(comb).connect(out);
@@ -170,7 +170,7 @@ export class HexSpeech {
     // 短殘響（像在頭盔／小房間裡）
     const verb = ctx.createGain();
     const conv = ctx.createConvolver();
-    conv.buffer = impulse(ctx, 0.45);
+    conv.buffer = impulse(ctx, 0.22);
     presence.connect(conv).connect(verb).connect(out);
 
     this.gains = { dry, comb, ring, verb };

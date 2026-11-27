@@ -1,3 +1,4 @@
+import { drawReactor } from './reactor';
 /**
  * HEX 主控台（第二段）：大核心＋左側系統儀表（下方留給常駐對話欄）＋右側天氣卡＋下方聲波，
  * 面板之間用電路折線連到核心。純 Canvas 繪製。
@@ -179,61 +180,14 @@ export class HexConsole {
       ctx.stroke();
     }
 
-    // 多層反向旋轉的弧
-    const rings: [number, number, number, number, number][] = [
-      // 半徑倍率、轉速、段數、每段長度、線寬
-      [1.0, 0.0005, 4, 1.1, 3],
-      [0.86, -0.0008, 6, 0.7, 2],
-      [0.72, 0.0012, 3, 1.6, 4],
-      [0.58, -0.0016, 8, 0.4, 1.5],
-    ];
-    for (const [m, sp, n, len, w] of rings) {
-      ctx.lineWidth = w;
-      ctx.strokeStyle = `rgba(${hexColor.rgb}, ${0.35 + 0.5 * k})`;
-      for (let i = 0; i < n; i++) {
-        const s = t * sp + (i * Math.PI * 2) / n;
-        ctx.beginPath();
-        ctx.arc(cx, cy, R * m, s, s + len);
-        ctx.stroke();
-      }
-    }
-
-    // 中心六角＋光暈
-    const pulse = 0.5 + 0.5 * Math.sin(t / 300);
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.5);
-    g.addColorStop(0, `rgba(230, 255, 255, ${0.6 + 0.3 * pulse})`);
-    g.addColorStop(0.5, `rgba(${hexColor.rgb}, 0.35)`);
-    g.addColorStop(1, `rgba(${hexColor.rgb}, 0)`);
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(cx, cy, R * 0.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.beginPath();
-    for (let i = 0; i < 6; i++) {
-      const ang = (Math.PI / 3) * i + Math.PI / 6 + t * 0.0003;
-      const px = cx + Math.cos(ang) * R * 0.3;
-      const py = cy + Math.sin(ang) * R * 0.3;
-      if (i) ctx.lineTo(px, py);
-      else ctx.moveTo(px, py);
-    }
-    ctx.closePath();
-    ctx.strokeStyle = `rgba(${hexColor.rgb}, 0.95)`;
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = hexColor.dark;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = `800 ${Math.round(R * 0.16)}px ${MONO}`;
-    ctx.fillText('HEX', cx, cy - R * 0.02);
+    drawReactor(ctx, cx, cy, R, t);
     if (k > 0.8) {
       ctx.globalAlpha = (k - 0.8) / 0.2;
       ctx.fillStyle = `rgb(${GOLD})`;
       ctx.shadowColor = `rgb(${GOLD})`;
       ctx.shadowBlur = 8;
       ctx.font = `600 ${Math.round(R * 0.075)}px ${MONO}`;
+      ctx.textAlign = 'center';
       ctx.fillText('S Y S T E M S   O N L I N E', cx, cy + R * 1.32);
     }
     ctx.restore();

@@ -1,3 +1,4 @@
+import { drawReactor } from './reactor';
 /**
  * HEX 全息選單：待機核心 → 螺旋展開成環 → 收成底部 Dock → 收回。
  * 純 Canvas 繪製，時間單位都是 performance.now() 的毫秒。
@@ -269,7 +270,7 @@ export class HexMenu {
       y: lerp(this.cy, this.dockCore.y, coreDock),
       r: lerp(this.coreR, this.rd * 1.2, coreDock),
     };
-    if (opts.core !== false) this.drawCore(ctx, t, open);
+    if (opts.core !== false) this.drawCore(ctx, t);
 
     const hovered = cursor ? this.hitNode(cursor.x, cursor.y, t) : null;
     for (const n of this.nodes) this.drawNode(ctx, n, t, dt, n.app === hovered, dockRaw, open);
@@ -324,58 +325,10 @@ export class HexMenu {
   }
 
   // ---- 核心（位置與大小跟著 this.core 走） ----
-  private drawCore(ctx: CanvasRenderingContext2D, t: number, open: number) {
+  private drawCore(ctx: CanvasRenderingContext2D, t: number) {
     const { x: cx, y: cy, r: R } = this.core;
-    const power = 0.3 + open * 0.7;
-    ctx.save();
-    ctx.shadowColor = `rgb(${hexColor.rgb})`;
-    ctx.shadowBlur = 10 + open * 25;
+    drawReactor(ctx, cx, cy, R, t);
 
-    // 外圈三段旋轉弧
-    ctx.lineWidth = Math.max(2, R * 0.07);
-    ctx.strokeStyle = `rgba(${hexColor.rgb}, ${0.35 + power * 0.5})`;
-    for (let i = 0; i < 3; i++) {
-      const a = t * (0.0004 + open * 0.0008) + (i * Math.PI * 2) / 3;
-      ctx.beginPath();
-      ctx.arc(cx, cy, R, a, a + 1.4);
-      ctx.stroke();
-    }
-    // 內圈反向
-    ctx.lineWidth = 1.5;
-    for (let i = 0; i < 6; i++) {
-      const a = -t * 0.0007 + (i * Math.PI) / 3;
-      ctx.beginPath();
-      ctx.arc(cx, cy, R * 0.72, a, a + 0.6);
-      ctx.stroke();
-    }
-    // 六角形核心
-    const pulse = 0.5 + 0.5 * Math.sin(t / (open > 0.5 ? 260 : 900));
-    ctx.beginPath();
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i + Math.PI / 6;
-      const px = cx + Math.cos(a) * R * 0.45;
-      const py = cy + Math.sin(a) * R * 0.45;
-      if (i) ctx.lineTo(px, py);
-      else ctx.moveTo(px, py);
-    }
-    ctx.closePath();
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.5);
-    g.addColorStop(0, `rgba(220, 255, 255, ${0.5 + pulse * 0.4 * power})`);
-    g.addColorStop(1, `rgba(${hexColor.rgb}, ${0.15 + power * 0.25})`);
-    ctx.fillStyle = g;
-    ctx.fill();
-    ctx.strokeStyle = `rgba(${hexColor.rgb}, 0.9)`;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // 深色字壓在發亮的核心上比較清楚
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = hexColor.dark;
-    ctx.font = `800 ${Math.max(9, Math.round(R * 0.26))}px ui-monospace, Consolas, monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('HEX', cx, cy + 1);
-    ctx.restore();
   }
 
   // ---- 展開瞬間的衝擊波 ----
