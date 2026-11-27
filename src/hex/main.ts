@@ -11,6 +11,8 @@ import { ClapDetector } from './clap';
 import { VoiceInput } from './voice';
 import { Swords, type SwordPose } from './swords';
 import { hexColor } from './theme';
+import { HudFrame } from './hudframe';
+import { sfx } from './sfx';
 import { HexSpeech, type VoiceLevel } from './speech';
 import { ChatDock } from './chatDock';
 import { drawVoiceWave, type VoiceMode } from './console';
@@ -103,9 +105,10 @@ let stage: Stage = 'standby';
 let pending: Stage | null = null;
 /** 萬劍歸宗：喚醒動畫／回待機時的散開 */
 const swords = new Swords();
-// 化為 HEX 的瞬間：整個介面換成紅色，HEX 開口打招呼
+// 化為 HEX 的瞬間：介面亮起來（電藍），HEX 開口打招呼
 swords.onFormed = () => {
   hexColor.set(true);
+  sfx.powerUp(); // 核心聚成：低沉的「嗡」
   greet();
 };
 
@@ -123,6 +126,12 @@ const speech = new HexSpeech(
     document.getElementById('ttsBtn')?.classList.toggle('speaking', on);
   },
 );
+// 介面音效：HEX 語音設成靜音時一起關掉
+sfx.enabled = () => speech.level !== 'off';
+// 按到任何按鈕都有輕輕的「滴」
+document.addEventListener('pointerdown', (e) => {
+  if ((e.target as HTMLElement).closest?.('button, [data-hex-action], .hp-btn')) sfx.tick();
+});
 function greet() {
   const h = new Date().getHours();
   // 英文招呼（參考展示影片裡的「Welcome home, sir.」）
@@ -144,6 +153,7 @@ export function goStage(next: Stage) {
   // 從待機叫醒：先播萬劍歸宗，聚成核心後才展開主控台
   if (stage === 'standby') {
     swords.gather(t);
+    sfx.scan(); // 喚醒開始：掃描嗶聲
     scatterPending = false;
   }
   // 回待機：等主控台／選單收合完，核心散成萬劍飛走
@@ -273,7 +283,10 @@ export function pressAt(x: number, y: number, fromGesture = false) {
   // 手勢點到畫面上的按鈕（例如 AR 鏡頭開關）
   if (fromGesture) {
     const btn = document.elementFromPoint(x, y)?.closest('[data-hex-action]') as HTMLElement | null;
-    if (btn) return btn.click();
+    if (btn) {
+      sfx.tick();
+      return btn.click();
+    }
   }
   // 點核心：待機 → 主控台 → 全息；全息時點核心回到主控台
   if (stage === 'standby' && menu.hitCore(x, y)) return goStage('console');
@@ -281,7 +294,10 @@ export function pressAt(x: number, y: number, fromGesture = false) {
   if (stage === 'holo' && menu.hitCore(x, y)) return goStage('console');
   let app = menu.hitNode(x, y, t);
   if (!app && fromGesture && lastHover && t - lastHover.t <= HOVER_GRACE_MS) app = lastHover.app;
-  if (app) launch(app);
+  if (app) {
+    sfx.tick();
+    launch(app);
+  }
 }
 
 // ---- iPhone 手勢控制 ----
@@ -591,6 +607,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ---- 繪圖迴圈 ----
+const hudFrame = new HudFrame();
 let last = performance.now();
 function loop() {
   requestAnimationFrame(loop);
@@ -605,16 +622,25 @@ function loop() {
   // 上一段收合完成後才展開下一段
   if (scatterPending && stage === 'standby' && hexConsole.state === 'hidden' && menu.state !== 'closing') {
     swords.scatter(t);
+    sfx.powerDown();
     scatterPending = false;
     hexColor.set(false); // 回到待機：藍色
   }
   if (pending && swords.ready(t) && hexConsole.state !== 'closing' && menu.state !== 'closing') {
-    if (pending === 'console') hexConsole.open(t);
-    if (pending === 'holo') menu.open(t);
+    if (pending === 'console') {
+      hexConsole.open(t);
+      setTimeout(() => sfx.online(), 600); // 跟 ONLINE 字樣同時
+    }
+    if (pending === 'holo') {
+      menu.open(t);
+      sfx.open();
+    }
     pending = null;
   }
 
   ctx.clearRect(0, 0, W, H);
+  hudFrame.dataVisible = stage !== 'console';
+  hudFrame.draw(ctx, t, W, H); // 金屬外框、背景資料層
   // 手離開鏡頭超過 0.6 秒，手勢游標就隱藏
   if (cursorFromHand && t - handT > 600) {
     cursor = null;

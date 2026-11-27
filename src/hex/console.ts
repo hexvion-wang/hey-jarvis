@@ -1,4 +1,4 @@
-import { drawReactor } from './reactor';
+import { drawRingCore } from './ringcore';
 /**
  * HEX 主控台（第二段）：大核心＋左側系統儀表（下方留給常駐對話欄）＋右側天氣卡＋下方聲波，
  * 面板之間用電路折線連到核心。純 Canvas 繪製。
@@ -6,7 +6,7 @@ import { drawReactor } from './reactor';
 
 
 import { hexColor } from './theme';
-const GOLD = '255, 201, 64';
+import { ACCENT as GOLD } from './theme';
 const RED = '255, 90, 90';
 export const CONSOLE_OPEN_MS = 2200;
 export const CONSOLE_CLOSE_MS = 800;
@@ -136,7 +136,7 @@ export class HexConsole {
 
     this.ease(dt);
     this.drawCircuits(ctx, t, lineK);
-    this.drawCore(ctx, t, standbyCoreR + (this.coreR - standbyCoreR) * coreK, coreK);
+    this.drawCore(ctx, t, standbyCoreR + (this.coreR - standbyCoreR) * coreK, coreK, this.state === 'opening' ? e : -1);
     if (panelK > 0) {
       this.drawLeft(ctx, t, panelK);
       this.drawRight(ctx, t, panelK);
@@ -160,7 +160,8 @@ export class HexConsole {
   }
 
   // ---- 大核心 ----
-  private drawCore(ctx: CanvasRenderingContext2D, t: number, R: number, k: number) {
+  /** e = 主控台展開後經過的毫秒（展開中才有，用來畫 ONLINE 的擴散圓環） */
+  private drawCore(ctx: CanvasRenderingContext2D, t: number, R: number, k: number, e = -1) {
     const { cx, cy } = this;
     ctx.save();
     ctx.shadowColor = `rgb(${hexColor.rgb})`;
@@ -180,7 +181,34 @@ export class HexConsole {
       ctx.stroke();
     }
 
-    drawReactor(ctx, cx, cy, R, t);
+    // 圓環一層一層亮起來（展開時 k 從 0 到 1）
+    ctx.shadowBlur = 0; // 發光由 drawRingCore 自己控制（整組都模糊太吃效能）
+    drawRingCore(ctx, cx, cy, R, t, k);
+    // 開機完成：圓環往外擴散＋大大的 ONLINE（參考使用者的開機影片）
+    if (e >= 0) {
+      for (const [delay, dur, maxR] of [[500, 1100, 1.9], [750, 1300, 2.5]] as const) {
+        const p = Math.min(1, Math.max(0, (e - delay) / dur));
+        if (p <= 0 || p >= 1) continue;
+        ctx.strokeStyle = `rgba(${hexColor.rgb}, ${0.8 * (1 - p)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, R * (1 + (maxR - 1) * (1 - Math.pow(1 - p, 3))), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      const p = Math.min(1, Math.max(0, (e - 600) / 1400));
+      if (p > 0 && p < 1) {
+        ctx.save();
+        ctx.globalAlpha = p < 0.2 ? p / 0.2 : 1 - (p - 0.2) / 0.8;
+        ctx.fillStyle = 'rgba(235, 248, 255, 0.95)';
+        ctx.shadowColor = `rgb(${hexColor.rgb})`;
+        ctx.shadowBlur = 18;
+        ctx.font = `800 ${Math.round(R * 0.2)}px ${MONO}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('O N L I N E', cx, cy - R * 1.4);
+        ctx.restore();
+      }
+    }
     if (k > 0.8) {
       ctx.globalAlpha = (k - 0.8) / 0.2;
       ctx.fillStyle = `rgb(${GOLD})`;

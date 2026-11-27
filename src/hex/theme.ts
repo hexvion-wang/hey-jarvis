@@ -1,8 +1,12 @@
-const STANDBY = [79, 174, 255];
-const ACTIVE = [48, 239, 201];
-const STANDBY_DARK = [8, 30, 55];
-const ACTIVE_DARK = [3, 52, 55];
+// 2026-11-28 使用者選參考圖的「電藍色＋橘色點綴」：待機暗一點的電藍、喚醒後亮電藍（不再變藍綠）
+const STANDBY = [46, 122, 228];
+const ACTIVE = [72, 178, 255];
+const STANDBY_DARK = [5, 18, 44];
+const ACTIVE_DARK = [6, 28, 62];
 const FADE_MS = 600;
+
+/** 橘色點綴（警示條、重點刻度、hover） */
+export const ACCENT = '255, 138, 42';
 
 let active = false;
 let changedAt = -1e9;
@@ -22,6 +26,10 @@ export const hexColor = {
   /** 深色底（核心內部） */
   get dark() {
     return `rgb(${mix(STANDBY_DARK, ACTIVE_DARK, k())})`;
+  },
+  /** 0（待機）~ 1（喚醒）：介面亮度 */
+  get level() {
+    return k();
   },
   get isActive() {
     return active;

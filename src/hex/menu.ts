@@ -1,4 +1,4 @@
-import { drawReactor } from './reactor';
+import { drawRingCore } from './ringcore';
 /**
  * HEX 全息選單：待機核心 → 螺旋展開成環 → 收成底部 Dock → 收回。
  * 純 Canvas 繪製，時間單位都是 performance.now() 的毫秒。
@@ -7,7 +7,7 @@ import { hexColor } from './theme';
 import { APPS, GROUPS, PANELS, type AppDef, type GroupId } from './apps';
 
 
-const GOLD = '255, 201, 64';
+import { ACCENT as GOLD } from './theme';
 export const OPEN_MS = 5200;
 export const CLOSE_MS = 1000;
 /** 節點從中心飛出的時間 */
@@ -327,8 +327,7 @@ export class HexMenu {
   // ---- 核心（位置與大小跟著 this.core 走） ----
   private drawCore(ctx: CanvasRenderingContext2D, t: number) {
     const { x: cx, y: cy, r: R } = this.core;
-    drawReactor(ctx, cx, cy, R, t);
-
+    drawRingCore(ctx, cx, cy, R, t);
   }
 
   // ---- 展開瞬間的衝擊波 ----

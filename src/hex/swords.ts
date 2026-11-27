@@ -118,7 +118,7 @@ export class Swords {
         alpha: 0,
       });
     }
-    this.sprites = [makeSprite('#173967', '#65aaff'), makeSprite('#107e92', '#30efc9'), makeSprite('#50cbbf', '#ddfff9')];
+    this.sprites = [makeSprite('#173967', '#65aaff'), makeSprite('#17468f', '#48b2ff'), makeSprite('#5b9fe8', '#e2f2ff')]; // 電藍配色（2026-11-28）
   }
 
   get busy() {
@@ -424,7 +424,7 @@ export class Swords {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 2);
     g.addColorStop(0, `rgba(223, 255, 250, ${0.85 * k})`);
-    g.addColorStop(0.25, `rgba(48, 239, 201, ${0.5 * k})`);
+    g.addColorStop(0.25, `rgba(72, 178, 255, ${0.5 * k})`);
     g.addColorStop(1, 'rgba(7, 38, 65, 0)');
     ctx.fillStyle = g;
     ctx.fillRect(cx - r * 2, cy - r * 2, r * 4, r * 4);

@@ -8,6 +8,8 @@
  * - 面板裡有 data-action 的按鈕 → 點擊（例如 ✕ 關閉、捲動、在 Obsidian 開啟）
  */
 
+import { sfx } from './sfx';
+
 export interface PanelDef {
   id: string;
   title: string;
@@ -134,6 +136,7 @@ export class Panels {
 
     const o: Open = { def, el, body };
     this.open.set(id, o);
+    sfx.open();
     def.onOpen?.(body);
 
     // 滑鼠操作
@@ -155,6 +158,7 @@ export class Panels {
     const o = this.open.get(id);
     if (!o) return;
     this.open.delete(id);
+    sfx.close();
     if (this.drag?.o === o) this.drag = null;
     o.el.classList.remove('shown');
     o.el.classList.add('closing');
@@ -294,6 +298,7 @@ export class Panels {
   /** 丟掉：面板往那一側飛出畫面、淡出，然後關閉 */
   private throwAway(o: Open, side: number) {
     this.open.delete(o.def.id);
+    sfx.close();
     o.el.classList.remove('grabbed', 'scrolling', 'will-throw', 'shown');
     o.el.classList.add('thrown');
     o.el.style.transform = `translate(${side * window.innerWidth * 0.8}px, -40px) rotate(${side * 14}deg) scale(0.9)`;
