@@ -677,3 +677,58 @@ body.hex.ar-live { background: #000; }
 #ttsBtn.speaking { box-shadow: 0 0 14px rgba(var(--hex-rgb), 0.6); animation: ttsPulse 0.9s ease-in-out infinite; }
 @keyframes ttsPulse { 50% { box-shadow: 0 0 22px rgba(var(--hex-rgb), 0.9); } }
 #bootBtn { top: 224px; }
+
+/* ===== HEX：常駐對話欄（左下，主控台與全息模式都在） ===== */
+#chatDock {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px 12px;
+  border: 1px solid rgba(var(--hex-rgb), 0.28);
+  border-radius: 12px;
+  background: rgba(0, 10, 18, 0.38);
+  backdrop-filter: blur(6px);
+  color: #e6fbff;
+  z-index: 6;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px);
+  transition: opacity 0.4s, transform 0.4s, height 0.3s;
+}
+#chatDock.shown { opacity: 1; pointer-events: auto; transform: none; }
+#chatDock .cd-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 6px; border-bottom: 1px solid rgba(var(--hex-rgb), 0.18); }
+#chatDock .cd-title { font: 700 12px ui-monospace, Consolas, 'Microsoft JhengHei', monospace; letter-spacing: 0.14em; color: rgb(var(--hex-rgb)); }
+#chatDock .cd-tools { display: flex; gap: 6px; }
+#chatDock .cd-scroll { flex: 1; overflow-y: auto; margin: 6px 0; padding-right: 4px; scrollbar-width: thin; scrollbar-color: rgba(var(--hex-rgb), 0.35) transparent; }
+#chatDock .chat-msg { margin: 6px 0; padding: 7px 10px; font-size: 13px; line-height: 1.6; }
+#chatDock .chat-msg.hex { background: rgba(var(--hex-rgb), 0.06); border-color: rgba(var(--hex-rgb), 0.2); }
+#chatDock .chat-quick { margin: 4px 0 6px; }
+#chatDock .chat-form { background: transparent; }
+#chatDock .chat-in { padding: 7px 10px; font-size: 13px; background: rgba(0, 16, 26, 0.55); border-color: rgba(var(--hex-rgb), 0.35); }
+.cd-btn {
+  padding: 4px 10px;
+  border: 1px solid rgba(var(--hex-rgb), 0.45);
+  border-radius: 999px;
+  background: rgba(0, 18, 30, 0.4);
+  color: rgb(var(--hex-rgb));
+  font: 12px 'Microsoft JhengHei', system-ui, sans-serif;
+  cursor: pointer;
+}
+.cd-btn:hover { border-color: #ffc940; color: #ffc940; }
+#chatDock.busy .chat-quick, #chatDock.busy .chat-form { opacity: 0.45; pointer-events: none; }
+#chatDock .cd-pill { display: none; }
+/* 縮小：只剩一顆按鈕 */
+#chatDock.folded { height: auto !important; width: auto !important; padding: 0; border: 0; background: transparent; backdrop-filter: none; }
+#chatDock.folded > :not(.cd-pill) { display: none; }
+#chatDock.folded .cd-pill { display: block; padding: 7px 14px; border: 1px solid rgba(var(--hex-rgb), 0.5); border-radius: 999px; background: rgba(0, 18, 30, 0.55); color: rgb(var(--hex-rgb)); font: 600 12px 'Microsoft JhengHei', system-ui, sans-serif; cursor: pointer; }
+
+/* ===== 右上角按鈕排成一列（不要蓋到主控台右邊的天氣卡） ===== */
+#hudBtns {
+  position: fixed;
+  top: 58px;
+  right: 24px;
+  display: flex;
+  gap: 8px;
+  z-index: 5;
+}
+#hudBtns > button { position: relative; top: auto; right: auto; }

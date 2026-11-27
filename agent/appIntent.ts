@@ -66,4 +66,9 @@ export function extractOpen(text: string, known: string[]) {
   return { ids, text: clean.trim() };
 }
 
+/** 使用者的話裡有沒有「要開東西」的意思（AI 自己加的開程式標記，要這個成立才照做） */
+export function wantsOpen(text: string) {
+  return /(開|啟動|叫出|執行|給我|要用|想用|想玩|來玩|切到|open|launch|start|run)/i.test(text) && !NEGATIVE.test(text);
+}
+
 export const appName = (id: string) => APP_NAMES[id]?.name ?? id;

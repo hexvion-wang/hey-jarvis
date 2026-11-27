@@ -12,6 +12,8 @@ import { VoiceInput } from './voice';
 import { Swords, type SwordPose } from './swords';
 import { hexColor } from './theme';
 import { HexSpeech, type VoiceLevel } from './speech';
+import { ChatDock } from './chatDock';
+import { drawVoiceWave, type VoiceMode } from './console';
 
 document.getElementById('ver')!.textContent = BUILD_ID;
 ensureLatest();
@@ -32,6 +34,8 @@ const panels = new Panels(document.body);
 let W = 1;
 let H = 1;
 
+/** 常駐對話欄（在下面建立；resize 時要跟著主控台的版面擺放） */
+let chatDock: ChatDock | null = null;
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   W = window.innerWidth;
@@ -41,6 +45,7 @@ function resize() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   menu.layout(W, H);
   hexConsole.layout(W, H);
+  chatDock?.place(hexConsole.chatRect);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -146,6 +151,7 @@ export function goStage(next: Stage) {
   stage = next;
   pending = next === 'standby' ? null : next;
   if (next === 'console') refreshDaily();
+  chatDock?.show(next !== 'standby');
   setStateLabel();
 }
 
@@ -180,11 +186,15 @@ async function refreshSys() {
 }
 setInterval(refreshSys, 2000);
 
-const chat = definePanels(panels, {
+definePanels(panels, {
   api,
   agentOk: () => agentOk,
   getSys: () => hexConsole.sys,
   toast,
+});
+chatDock = new ChatDock({
+  api,
+  agentOk: () => agentOk,
   onReply: (text) => speech.say(text),
   onOpened(ids) {
     const t = performance.now();
@@ -196,8 +206,21 @@ const chat = definePanels(panels, {
   },
 });
 
+chatDock.place(hexConsole.chatRect);
+chatDock.show(stage !== 'standby');
+
+// 天氣：進主控台時更新，之後每 15 分鐘（agent 那邊也有 15 分鐘快取）
+async function refreshWeather() {
+  if (!agentOk) return;
+  const r = await api('/api/weather').catch(() => null);
+  hexConsole.weather = r?.ok ? r : hexConsole.weather;
+  hexConsole.weatherError = !r?.ok && !hexConsole.weather;
+}
+setInterval(refreshWeather, 15 * 60 * 1000);
+
 async function refreshDaily() {
   refreshSys();
+  refreshWeather();
   if (!agentOk) return;
   try {
     const r = await api('/api/daily-summary');
@@ -210,6 +233,7 @@ async function refreshDaily() {
 async function launch(app: AppDef) {
   lastActivity = performance.now();
   menu.flash(app.id, performance.now());
+  if (app.id === 'panel-chat') return chatDock?.toggleFold();
   if (app.kind === 'panel') return panels.toggle(PANEL_OF[app.id], menu.dockPos(app.id));
   link.send({ type: 'status', headline: `啟動 ${app.name}` });
   if (!agentOk) return toast(`${app.name}：要從本機 agent 開啟（雙擊 啟動Jarvis.cmd）`, 4000);
@@ -380,14 +404,9 @@ setTimeout(refreshBoot, 1500);
 
 // ---- 語音指令（本機 Whisper）：按「說話」/ Enter / 全息模式拍手兩下 → 錄一句 → 辨識 → 交給 HEX 對話 ----
 const talkBtn = $('talkBtn');
-const voiceEl = $('voice');
-const voiceText = voiceEl.querySelector('.vo-text') as HTMLElement;
-const voiceLevel = $('voiceLevel');
+// 聆聽／辨識／HEX 說話的狀態都畫在底部聲波上（不再跳出框）
 const voice = new VoiceInput((s) => {
-  voiceEl.className = s === 'idle' ? '' : `show ${s}`;
   talkBtn.classList.toggle('on', s !== 'idle');
-  if (s === 'listening') voiceText.textContent = '聆聽中…說完停一下';
-  if (s === 'thinking') voiceText.textContent = '辨識中…';
   clap.paused = s !== 'idle' || speech.speaking;
   if (s === 'listening') speech.stop(); // 開始聽你說話時，HEX 先閉嘴
 });
@@ -407,7 +426,6 @@ ttsBtn.addEventListener('click', () => {
   paintTts();
   if (next !== 'off') speech.say(next === 'strong' ? '語音模式：強。' : '語音模式：弱。');
 });
-setInterval(() => (voiceLevel.style.width = `${Math.round(voice.level * 100)}%`), 50);
 
 async function talk() {
   if (voice.state === 'listening') return voice.cancel();
@@ -430,13 +448,13 @@ async function talk() {
     }
     const text = String(r.text ?? '').trim();
     if (!text) return toast('沒聽清楚，再說一次');
-    voiceText.textContent = `「${text}」`;
-    if (stage !== 'holo') {
-      goStage('holo');
-      swords.skip(performance.now()); // 用說的：萬劍直接歸宗，不用等
+    // 用說的：留在目前這一段回答；待機時直接進主控台（萬劍直接歸宗）
+    if (stage === 'standby') {
+      goStage('console');
+      swords.skip(performance.now());
     }
-    const from = { x: innerWidth / 2, y: innerHeight / 2 };
-    setTimeout(() => chat.say(text, from), stage === 'holo' ? 0 : 900);
+    chatDock?.say(text);
+    setTimeout(() => (document.activeElement as HTMLElement | null)?.blur(), 300);
   } catch {
     toast('本機 agent 沒有回應', 4000);
   } finally {
@@ -603,6 +621,17 @@ function loop() {
     swords.control(hand, t);
   }
   swords.draw(ctx, t, W, H, menu.coreR);
+
+  // 聲波：聽你說話時跟著你的音量，HEX 說話時跟著它的聲音
+  const vMode: VoiceMode =
+    voice.state === 'listening' ? 'listening' : voice.state === 'thinking' ? 'thinking' : speech.speaking ? 'speaking' : 'idle';
+  const vLevel = vMode === 'listening' ? voice.level : vMode === 'speaking' ? speech.level01 : 0;
+  hexConsole.setVoice(vMode, vLevel);
+  // 全息模式沒有主控台的聲波：在 Dock 上方顯示一條小的
+  if (stage === 'holo' && vMode !== 'idle') {
+    const ww = Math.min(420, W * 0.3);
+    drawVoiceWave(ctx, { x: W / 2 - ww / 2, y: H - 300, w: ww, h: 52 }, t, vMode, hexConsole.voiceLevel, 1);
+  }
   if (hovered && !(cursorFromHand && handPinch)) lastHover = { app: hovered, t };
   panels.hoverAt(cursorFromHand ? cursor : null);
   panels.tick();

@@ -6,7 +6,8 @@ import { join, extname, resolve, relative } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { findDaily, searchNote, openInObsidian, summarizeDaily, readDaily, type VaultConfig } from './obsidian.ts';
 import { getSysInfo } from './sysinfo.ts';
-import { quickOpen, appPrompt, extractOpen, appName } from './appIntent.ts';
+import { getWeather, DEFAULT_PLACE, type WeatherPlace } from './weather.ts';
+import { quickOpen, appPrompt, extractOpen, appName, wantsOpen } from './appIntent.ts';
 
 const PORT = Number(process.env.JARVIS_PORT) || 4000;
 const ROOT = resolve(import.meta.dirname, '..');
@@ -18,7 +19,7 @@ if (!existsSync(CONFIG_PATH)) {
   console.error('找不到 jarvis.config.json，請複製 jarvis.config.example.json 並填入 Obsidian vault 路徑');
   process.exit(1);
 }
-const cfg: VaultConfig & { apps?: Record<string, string> } = JSON.parse(await readFile(CONFIG_PATH, 'utf8'));
+const cfg: VaultConfig & { apps?: Record<string, string>; weather?: WeatherPlace } = JSON.parse(await readFile(CONFIG_PATH, 'utf8'));
 const apps: Record<string, string> = cfg.apps ?? {};
 if (!existsSync(cfg.vault)) {
   console.error(`vault 路徑不存在：${cfg.vault}`);
@@ -66,6 +67,13 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
 
   // 設定檔裡有哪些程式可以開（只回傳 id，不回傳路徑）
   if (path === '/api/apps' && req.method === 'GET') return send(res, 200, { ok: true, ids: Object.keys(apps) });
+  if (path === '/api/weather' && req.method === 'GET') {
+    try {
+      return send(res, 200, { ok: true, ...((await getWeather(cfg.weather ?? DEFAULT_PLACE)) as object) });
+    } catch (e) {
+      return send(res, 200, { ok: false, error: String(e) });
+    }
+  }
   if (path === '/api/sys' && req.method === 'GET') return send(res, 200, { ok: true, ...(await getSysInfo()) });
   if (path === '/api/daily-full' && req.method === 'GET') {
     const d = await readDaily(cfg);
@@ -251,7 +259,9 @@ async function chat(res: ServerResponse, body: Record<string, unknown>) {
       .trim();
     // AI 判斷要開程式時，會在回答裡寫 [[OPEN:id]]
     const ex = extractOpen(text, known);
-    const opened = ex.ids.filter((id) => launchApp(id));
+    // 防呆：使用者沒有要開東西（例如只是問日報），AI 加的開程式標記就不理
+    const opened = wantsOpen(lastUser.content) ? ex.ids.filter((id) => launchApp(id)) : [];
+    if (ex.ids.length && !opened.length) console.log(`HEX 對話：AI 想開 ${ex.ids.join(', ')}，但使用者沒有要開，略過`);
     console.log(`HEX 對話：${(Date.now() - t0) / 1000}s${usedDaily ? `（參考 ${usedDaily}）` : ''}${opened.length ? `，開啟 ${opened.join(', ')}` : ''}`);
     return send(res, 200, { ok: true, text: ex.text || '（沒有回應）', daily: usedDaily || undefined, opened: opened.length ? opened : undefined });
   } catch (e) {

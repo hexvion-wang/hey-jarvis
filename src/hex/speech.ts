@@ -19,8 +19,9 @@ interface Mix {
   verb: number;
 }
 const MIX: Record<Exclude<VoiceLevel, 'off'>, Mix> = {
-  strong: { dry: 0.55, comb: 0.55, ring: 0.16, verb: 0.22 },
-  weak: { dry: 0.85, comb: 0.25, ring: 0.05, verb: 0.12 },
+  // 2026-11-27 使用者覺得太重：整體調弱（新的「強」≈ 舊的「弱」）
+  strong: { dry: 0.82, comb: 0.26, ring: 0.05, verb: 0.13 },
+  weak: { dry: 0.94, comb: 0.1, ring: 0.015, verb: 0.07 },
 };
 
 export class HexSpeech {
@@ -31,6 +32,17 @@ export class HexSpeech {
   private gains: Record<keyof Mix, GainNode> | null = null;
   private current: AudioBufferSourceNode | null = null;
   private queueId = 0;
+  private meter: AnalyserNode | null = null;
+  private meterBuf = new Float32Array(512);
+
+  /** 目前說話的音量 0~1（給聲波用） */
+  get level01() {
+    if (!this.meter || !this.speaking) return 0;
+    this.meter.getFloatTimeDomainData(this.meterBuf);
+    let sum = 0;
+    for (const v of this.meterBuf) sum += v * v;
+    return Math.min(1, Math.sqrt(sum / this.meterBuf.length) * 5);
+  }
 
   constructor(
     private api: (text: string) => Promise<ArrayBuffer | null>,
@@ -94,7 +106,7 @@ export class HexSpeech {
     if (id !== this.queueId) return;
     const src = ctx.createBufferSource();
     src.buffer = buf;
-    src.playbackRate.value = this.level === 'strong' ? 0.95 : 0.98;
+    src.playbackRate.value = this.level === 'strong' ? 0.97 : 0.99;
     src.connect(this.input!);
     this.current = src;
     await new Promise<void>((resolve) => {
@@ -116,6 +128,9 @@ export class HexSpeech {
     const master = ctx.createGain();
     master.gain.value = 0.9;
     out.connect(master).connect(ctx.destination);
+    this.meter = ctx.createAnalyser();
+    this.meter.fftSize = 512;
+    master.connect(this.meter);
 
     // 「頭盔喇叭」的音色：切掉低頻、提升中高頻，所有濕聲都先經過這裡
     const hp = ctx.createBiquadFilter();
