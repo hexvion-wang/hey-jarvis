@@ -513,6 +513,13 @@ const link = new DeskLink({
       handHistory.push({ ...cursor, t });
       if (panels.dragging) panels.moveTo(cursor.x, cursor.y);
       while (handHistory.length && t - handHistory[0].t > 300) handHistory.shift();
+    } else if (msg.type === 'clasp') {
+      // 雙手合十：回到待機（核心散成萬劍飛走、變回藍色）
+      if (stage !== 'standby') {
+        speech.say('好的，HEX 進入待機。');
+        goStage('standby');
+        toast('🙏 回到待機');
+      }
     } else if (msg.type === 'pinch') {
       handPinch = msg.down;
       if (!msg.down) panels.release();

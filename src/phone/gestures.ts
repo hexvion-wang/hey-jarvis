@@ -184,3 +184,53 @@ export class GestureTracker {
     return s;
   }
 }
+
+/**
+ * 雙手合十（手指交扣、兩手掌貼在一起）：兩隻手都在鏡頭裡、兩個手掌中心靠得很近，
+ * 持續約 0.5 秒 → 觸發一次。兩手分開後才能再觸發。
+ */
+export class ClaspDetector {
+  private since = 0;
+  private lastSeen = 0;
+  private armed = true;
+  /** 0~1：合十維持的進度（畫面提示用） */
+  progress = 0;
+
+  constructor(private holdMs = 500) {}
+
+  update(vp: Viewport, hands: NormalizedLandmark[][], t: number): boolean {
+    let close = false;
+    if (hands.length >= 2) {
+      const px = (h: NormalizedLandmark[], i: number) => ({ x: h[i].x * vp.videoW, y: h[i].y * vp.videoH });
+      const center = (h: NormalizedLandmark[]) => {
+        const ids = [0, 5, 9, 13, 17];
+        const p = ids.map((i) => px(h, i));
+        return { x: p.reduce((s, v) => s + v.x, 0) / 5, y: p.reduce((s, v) => s + v.y, 0) / 5 };
+      };
+      const size = (h: NormalizedLandmark[]) => Math.hypot(px(h, 0).x - px(h, 9).x, px(h, 0).y - px(h, 9).y);
+      const a = center(hands[0]);
+      const b = center(hands[1]);
+      const palm = (size(hands[0]) + size(hands[1])) / 2 || 1;
+      const d = Math.hypot(a.x - b.x, a.y - b.y) / palm;
+      close = d < 0.9;
+      // 分得夠開才重新啟用
+      if (d > 1.6) this.armed = true;
+    }
+    if (close) {
+      this.lastSeen = t;
+      if (!this.since) this.since = t;
+    } else if (t - this.lastSeen > 200) {
+      // 偶爾一兩幀沒抓到不算放開
+      this.since = 0;
+      if (hands.length < 2 && t - this.lastSeen > 600) this.armed = true;
+    }
+    this.progress = this.since && this.armed ? Math.min(1, (t - this.since) / this.holdMs) : 0;
+    if (this.armed && this.since && t - this.since >= this.holdMs) {
+      this.armed = false;
+      this.since = 0;
+      this.progress = 0;
+      return true;
+    }
+    return false;
+  }
+}
