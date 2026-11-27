@@ -101,6 +101,8 @@ const STAGES: Stage[] = ['standby', 'console', 'holo'];
 let stage: Stage = 'standby';
 /** 最近一次換段的時間（剛換段時不理合十，避免一進去就被彈回待機） */
 let stageAt = -1e9;
+/** 萬劍動畫最後一次在播的時間（動畫中和剛結束 2 秒內都不理合十） */
+let swordsBusyT = -1e9;
 /** 等目前的收合動畫跑完，才打開下一段 */
 let pending: Stage | null = null;
 /** 萬劍歸宗：喚醒動畫／回待機時的散開 */
@@ -518,7 +520,7 @@ const link = new DeskLink({
       while (handHistory.length && t - handHistory[0].t > 300) handHistory.shift();
     } else if (msg.type === 'clasp') {
       // 雙手合十：回到待機（核心散成萬劍飛走、變回藍色）
-      if (stage !== 'standby' && !swords.capturing && t - stageAt > 3000) {
+      if (stage !== 'standby' && !swords.busy && t - swordsBusyT > 2000 && t - stageAt > 3000) {
         speech.say('好的，HEX 進入待機。');
         goStage('standby');
         toast('🙏 回到待機');
@@ -636,6 +638,7 @@ function loop() {
     const hand = cursorFromHand && cursor && t - handT < 600 ? { pose: handPose, x: cursor.x, y: cursor.y } : null;
     swords.control(hand, t);
   }
+  if (swords.busy) swordsBusyT = t;
   swords.draw(ctx, t, W, H, menu.coreR);
   // 對話欄：主控台／全息模式才顯示，萬劍歸宗播放中先藏起來
   chatDock?.show(stage === 'console' ? !swords.capturing : stage === 'holo' && chatInHolo);
