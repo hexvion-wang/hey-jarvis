@@ -73,7 +73,13 @@ abstract class LinkBase {
 
 /** iPhone 端：產生（或沿用）配對碼，等電腦連進來 */
 export class PhoneLink extends LinkBase {
-  code = localStorage.getItem(CODE_KEY) || newCode();
+  // 舊版的 4 位數字碼太容易被猜到，換成新的長碼
+  code = validCode(localStorage.getItem(CODE_KEY) ?? '') || newCode();
+
+  /** 顯示用：ABCDE-FGHJK */
+  get display() {
+    return formatCode(this.code);
+  }
 
   start() {
     localStorage.setItem(CODE_KEY, this.code);
@@ -105,12 +111,13 @@ export class DeskLink extends LinkBase {
   private retry = 0;
 
   static savedCode() {
-    return localStorage.getItem(CODE_KEY) || '';
+    const c = validCode(localStorage.getItem(CODE_KEY) ?? '');
+    return c ? formatCode(c) : '';
   }
 
   connect(code: string) {
-    this.code = code.trim();
-    if (!/^\d{4}$/.test(this.code)) return this.h.onState('error', '配對碼是 4 位數字');
+    this.code = validCode(code);
+    if (!this.code) return this.h.onState('error', `配對碼是 ${CODE_LEN} 個英文字母和數字（看 iPhone 畫面）`);
     localStorage.setItem(CODE_KEY, this.code);
     clearTimeout(this.retry);
     this.h.onState('connecting');
@@ -156,6 +163,24 @@ export class DeskLink extends LinkBase {
   }
 }
 
+/**
+ * 配對碼：10 個隨機字元（去掉容易看錯的 0 O 1 I L），約 8×10^14 種組合，猜不到。
+ * 誰知道配對碼就能連上 iPhone、要求看鏡頭畫面，所以不能用短碼。
+ */
+const CODE_LEN = 10;
+const ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+
 function newCode() {
-  return String(Math.floor(1000 + Math.random() * 9000));
+  const bytes = crypto.getRandomValues(new Uint8Array(CODE_LEN));
+  return Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join('');
+}
+
+/** 整理使用者輸入的碼（大小寫、橫線、空白都可以）；格式不對回傳空字串 */
+function validCode(raw: string) {
+  const c = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return c.length === CODE_LEN && [...c].every((ch) => ALPHABET.includes(ch)) ? c : '';
+}
+
+function formatCode(c: string) {
+  return c.slice(0, 5) + '-' + c.slice(5);
 }

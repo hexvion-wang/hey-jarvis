@@ -100,7 +100,7 @@ function press(x: number, y: number, t: number, fromGesture = false) {
       link.send({ type: 'core' });
       showBanner('已呼叫電腦上的 Jarvis');
     } else {
-      showBanner('還沒連上電腦：在電腦輸入配對碼 ' + link.code);
+      showBanner('還沒連上電腦：在電腦輸入配對碼 ' + link.display);
     }
   } else if (b) {
     hits++;
@@ -204,7 +204,7 @@ const link = new PhoneLink({
         ? `LINK ✓ 已連上電腦`
         : state === 'error'
           ? `LINK ✗ ${detail ?? ''}`
-          : `配對碼 ${link.code} · 在電腦輸入`;
+          : `配對碼 ${link.display} · 在電腦輸入`;
     if (state === 'connected') showBanner('已連上電腦 · 控制器模式');
   },
   onMessage(msg) {

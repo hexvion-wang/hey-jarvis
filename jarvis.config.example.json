@@ -1,7 +1,7 @@
 {
   "vault": "D:\\path\\to\\your\\obsidian-vault",
   "dailyReport": {
-    "folder": "閱讀/台美股日報",
+    "folder": "Daily",
     "format": "YYYY-MM-DD"
   },
   "apps": {
