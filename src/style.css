@@ -1,17 +1,16 @@
 :root {
-  /* 主色（HEX 喚醒後 body.hex-red 會換成紅色） */
   --hex-rgb: 0, 229, 255;
   --gold: #ffc940;
   --red: #ff3b3b;
   --bg: #000810;
 }
 
-/* 由主色算出來的顏色要定義在 body 上，body.hex-red 換色時才會跟著變 */
 body {
   --cyan: rgb(var(--hex-rgb));
   --cyan-dim: rgba(var(--hex-rgb), 0.35);
 }
-body.hex-red { --hex-rgb: 255, 46, 70; }
+body.hex { --hex-rgb: 79, 174, 255; --gold: #efbb72; }
+body.hex-active { --hex-rgb: 48, 239, 201; }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -747,3 +746,43 @@ body.ar-live #arWin { opacity: 1; transform: none; }
   z-index: 5;
 }
 #hudBtns > button { position: relative; top: auto; right: auto; }
+
+/* Etched instrument surface under the transparent HUD. */
+body.hex {
+  background-color: #03090e;
+  background-image:
+    radial-gradient(ellipse at center, transparent 22%, #02070bdc 94%),
+    radial-gradient(ellipse at 18% 28%, #16365755, transparent 56%),
+    radial-gradient(rgba(var(--hex-rgb), .14) .8px, transparent 1px),
+    radial-gradient(ellipse at 50% 48%, rgba(var(--hex-rgb), .095), transparent 64%);
+  background-size: auto, auto, 22px 22px, auto;
+}
+.hex .corner.tl {
+  background: linear-gradient(100deg, rgba(var(--hex-rgb), .10), transparent);
+  border-bottom: 1px solid rgba(var(--hex-rgb), .2);
+  min-width: 124px;
+}
+.hex .corner b {
+  font: 650 23px/1.1 'Bahnschrift', system-ui, sans-serif;
+  letter-spacing: .22em;
+  color: #e3f3f5;
+  text-shadow: none;
+}
+.hex #hudBtns {
+  padding: 5px;
+  gap: 3px;
+  border: 1px solid rgba(var(--hex-rgb), .24);
+  border-radius: 5px;
+  background: linear-gradient(180deg, #15212af0, #070e14f5);
+  box-shadow: inset 0 1px rgba(255,255,255,.08), 0 5px 20px #0005;
+  max-width: calc(100vw - 32px);
+  flex-wrap: wrap;
+}
+.hex #hudBtns > button {
+  border-radius: 2px;
+  letter-spacing: .04em;
+}
+.hex #hudBtns > button:focus-visible {
+  outline: 2px solid #ffce76;
+  outline-offset: 1px;
+}
