@@ -542,8 +542,9 @@ export class HexMenu {
     n.hover += ((hovered ? 1 : 0) - n.hover) * Math.min(1, dt / 90);
     const flash = clamp01(1 - (t - n.flashT) / 700);
     const r = baseR * (1 + n.hover * 0.18 + flash * 0.1);
-    const idle = n.panel ? GOLD : hexColor.rgb;
-    const rgb = n.hover > 0.5 || flash > 0 ? (n.panel ? hexColor.rgb : GOLD) : idle;
+    // 面板按鈕（日報、系統、對話）和程式按鈕同一個顏色，游標停上去才變金色
+    const idle = hexColor.rgb;
+    const rgb = n.hover > 0.5 || flash > 0 ? GOLD : idle;
     const dim = n.available ? 1 : 0.35;
     const alpha = Math.min(1, p * 1.5) * dim;
     const lineA = closingDock || n.panel ? 0 : 1 - Math.min(1, dockRaw * 3);

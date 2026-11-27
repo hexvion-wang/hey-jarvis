@@ -36,6 +36,8 @@ let H = 1;
 
 /** 常駐對話欄（在下面建立；resize 時要跟著主控台的版面擺放） */
 let chatDock: ChatDock | null = null;
+/** 全息模式預設不顯示對話欄，按 Dock 的「AI」或用說的才打開 */
+let chatInHolo = false;
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   W = window.innerWidth;
@@ -153,6 +155,7 @@ export function goStage(next: Stage) {
   stage = next;
   pending = next === 'standby' ? null : next;
   if (next === 'console') refreshDaily();
+  if (next === 'holo') chatInHolo = false; // 每次進全息模式都先關著
   setStateLabel();
   placeAR();
 }
@@ -234,7 +237,14 @@ async function refreshDaily() {
 async function launch(app: AppDef) {
   lastActivity = performance.now();
   menu.flash(app.id, performance.now());
-  if (app.id === 'panel-chat') return chatDock?.toggleFold();
+  if (app.id === 'panel-chat') {
+    if (stage === 'holo') {
+      chatInHolo = !chatInHolo;
+      if (chatInHolo) chatDock?.toggleFold(false);
+      return;
+    }
+    return chatDock?.toggleFold();
+  }
   if (app.kind === 'panel') return panels.toggle(PANEL_OF[app.id], menu.dockPos(app.id));
   link.send({ type: 'status', headline: `啟動 ${app.name}` });
   if (!agentOk) return toast(`${app.name}：要從本機 agent 開啟（雙擊 啟動Jarvis.cmd）`, 4000);
@@ -449,6 +459,7 @@ async function talk() {
       goStage('console');
       swords.skip(performance.now());
     }
+    chatInHolo = true; // 全息模式用說的：打開對話欄看回答
     chatDock?.say(text);
     setTimeout(() => (document.activeElement as HTMLElement | null)?.blur(), 300);
   } catch {
@@ -617,7 +628,7 @@ function loop() {
   }
   swords.draw(ctx, t, W, H, menu.coreR);
   // 對話欄：主控台／全息模式才顯示，萬劍歸宗播放中先藏起來
-  chatDock?.show(stage !== 'standby' && !swords.capturing);
+  chatDock?.show(stage === 'console' ? !swords.capturing : stage === 'holo' && chatInHolo);
 
   // 聲波：聽你說話時跟著你的音量，HEX 說話時跟著它的聲音
   const vMode: VoiceMode =
