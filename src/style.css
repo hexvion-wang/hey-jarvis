@@ -415,6 +415,9 @@ body.controller #ctrlHint { display: flex; }
   cursor: grab;
 }
 .hpanel.closing { transform: scale(0.85) !important; opacity: 0 !important; transition-duration: 0.3s; }
+/* 甩出去關閉：拖到邊緣時邊框變紅；放開後往旁邊飛出去 */
+.hpanel.grabbed.will-throw { --edge: 255, 90, 90; }
+.hpanel.thrown { transition: transform 0.45s cubic-bezier(0.4, 0, 0.9, 0.6), opacity 0.45s ease-in !important; pointer-events: none; }
 .hpanel:hover, .hpanel.hand-hover { --edge: 255, 201, 64; }
 .hpanel.grabbed { --edge: 125, 255, 176; cursor: grabbing; transition: border-color 0.15s, box-shadow 0.15s; }
 .hpanel .hp-corner { position: absolute; width: 16px; height: 16px; border: 0 solid rgb(var(--edge)); filter: drop-shadow(0 0 4px rgb(var(--edge))); pointer-events: none; }

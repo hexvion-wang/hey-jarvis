@@ -4,6 +4,7 @@
  * - 按住滑鼠 / 捏住「標題列」→ 綠色邊框（grab），拖曳移動面板
  * - 按住滑鼠 / 捏住「內容區」→ 上下拖曳捲動內容（像手機滑動）
  * - 手勢拖曳會減速＋平滑，並有一小段防誤觸距離
+ * - 抓著標題列往左右甩出去（或拖到畫面邊緣放開）→ 面板飛出畫面、關閉
  * - 面板裡有 data-action 的按鈕 → 點擊（例如 ✕ 關閉、捲動、在 Obsidian 開啟）
  */
 
@@ -32,6 +33,10 @@ const GESTURE_MOVE_GAIN = 0.6;
 const GESTURE_SCROLL_GAIN = 1.4;
 /** 捏下後要移動超過這個距離才開始拖曳／捲動（像素） */
 const DEAD_ZONE = 14;
+/** 甩出去關閉：放開前 0.15 秒內的水平速度超過這個值（像素/秒）。手勢移動已經乘過 GESTURE_MOVE_GAIN，門檻低一點 */
+const THROW_SPEED = { mouse: 1500, gesture: 850 };
+/** 拖到畫面左右邊緣放開也算丟掉：面板中心在畫面寬度的這個比例以外 */
+const THROW_EDGE = 0.08;
 
 interface Drag {
   o: Open;
@@ -47,6 +52,8 @@ interface Drag {
   left: number;
   top: number;
   scroll: number;
+  /** 最近的位置紀錄（算甩出去的速度） */
+  trail: { x: number; y: number; t: number }[];
 }
 
 export class Panels {
@@ -207,6 +214,7 @@ export class Panels {
       left: r.left,
       top: r.top,
       scroll: o.body.scrollTop,
+      trail: [],
     };
     o.el.style.zIndex = String(++this.z);
     o.el.classList.add('grabbed');
@@ -236,6 +244,11 @@ export class Panels {
     const r = d.o.el.getBoundingClientRect();
     d.left = Math.min(window.innerWidth - 60, Math.max(60 - r.width, d.startLeft + dx * k));
     d.top = Math.min(window.innerHeight - 40, Math.max(0, d.startTop + dy * k));
+    const now = performance.now();
+    d.trail.push({ x: d.left, y: d.top, t: now });
+    while (d.trail.length > 2 && now - d.trail[0].t > 200) d.trail.shift();
+    // 拖到邊緣：邊框變紅，提示放開就會丟掉
+    d.o.el.classList.toggle('will-throw', this.edgeSide(d.o, d.left) !== 0);
     if (!d.gesture) this.apply(d.o, d.left, d.top);
   }
 
@@ -256,15 +269,52 @@ export class Panels {
     this.apply(d.o, r.left + (d.left - r.left) * 0.3, r.top + (d.top - r.top) * 0.3);
   }
 
+  /** 面板中心在畫面左右邊緣以外：-1 左、1 右、0 不在邊緣 */
+  private edgeSide(o: Open, left: number) {
+    const c = (left + o.el.offsetWidth / 2) / window.innerWidth;
+    return c < THROW_EDGE ? -1 : c > 1 - THROW_EDGE ? 1 : 0;
+  }
+
+  /** 放開時要不要丟掉：往左右甩得夠快，或拖到邊緣。回傳方向（-1 / 1），0 = 不丟 */
+  private throwSide(d: Drag) {
+    if (d.mode !== 'move' || !d.active) return 0;
+    const now = performance.now();
+    const recent = d.trail.filter((p) => now - p.t < 150);
+    if (recent.length >= 2) {
+      const a = recent[0];
+      const b = recent[recent.length - 1];
+      const dt = Math.max(16, b.t - a.t) / 1000;
+      const vx = (b.x - a.x) / dt;
+      const vy = (b.y - a.y) / dt;
+      if (Math.abs(vx) > THROW_SPEED[d.gesture ? 'gesture' : 'mouse'] && Math.abs(vx) > Math.abs(vy) * 1.3) return Math.sign(vx);
+    }
+    return this.edgeSide(d.o, d.left);
+  }
+
+  /** 丟掉：面板往那一側飛出畫面、淡出，然後關閉 */
+  private throwAway(o: Open, side: number) {
+    this.open.delete(o.def.id);
+    o.el.classList.remove('grabbed', 'scrolling', 'will-throw', 'shown');
+    o.el.classList.add('thrown');
+    o.el.style.transform = `translate(${side * window.innerWidth * 0.8}px, -40px) rotate(${side * 14}deg) scale(0.9)`;
+    o.el.style.opacity = '0';
+    setTimeout(() => o.el.remove(), 500);
+  }
+
   release() {
     const d = this.drag;
     if (!d) return;
+    const side = this.throwSide(d);
+    if (side) {
+      this.drag = null;
+      return this.throwAway(d.o, side);
+    }
     // 手勢放開時直接停在目標位置
     if (d.gesture && d.active) {
       if (d.mode === 'move') this.apply(d.o, d.left, d.top);
       else d.o.body.scrollTop = d.scroll;
     }
-    d.o.el.classList.remove('grabbed', 'scrolling');
+    d.o.el.classList.remove('grabbed', 'scrolling', 'will-throw');
     this.drag = null;
   }
 
