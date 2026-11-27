@@ -55,6 +55,8 @@ export class HexConsole {
   private wave: Rect = { x: 0, y: 0, w: 0, h: 0 };
   /** 常駐對話欄的位置（左下，系統狀態下面） */
   chatRect: Rect = { x: 0, y: 0, w: 0, h: 0 };
+  /** AR 鏡頭小視窗的位置（右下，天氣卡下面） */
+  arRect: Rect = { x: 0, y: 0, w: 0, h: 0 };
   weather: WeatherInfo | null = null;
   weatherError = false;
   private voiceMode: VoiceMode = 'idle';
@@ -80,7 +82,12 @@ export class HexConsole {
     const lh = Math.min(400, (bottom - top) * 0.5);
     this.left = { x: W * 0.035, y: top, w: pw, h: lh };
     this.chatRect = { x: W * 0.035, y: top + lh + 14, w: pw, h: Math.max(160, bottom - (top + lh + 14)) };
-    this.right = { x: W - W * 0.035 - pw, y: this.cy - ph / 2, w: pw, h: ph };
+    // 右邊：天氣卡放在右上按鈕列下面，下面留給 AR 鏡頭小視窗（底部避開 iPhone 配對欄）
+    const rTop = Math.max(top, 112); // 右上角那排按鈕的下面
+    const rh = Math.min(ph, (H - 100 - rTop) * 0.62);
+    this.right = { x: W - W * 0.035 - pw, y: rTop, w: pw, h: rh };
+    const arTop = rTop + rh + 16;
+    this.arRect = { x: this.right.x, y: arTop, w: pw, h: Math.max(140, H - 100 - arTop) };
     const ww = Math.min(520, W * 0.36);
     this.wave = { x: this.cx - ww / 2, y: H * 0.84, w: ww, h: Math.min(70, H * 0.08) };
   }

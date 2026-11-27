@@ -46,6 +46,8 @@ function resize() {
   menu.layout(W, H);
   hexConsole.layout(W, H);
   chatDock?.place(hexConsole.chatRect);
+  // 第一次呼叫時下面的變數（stage）還沒建立，等這段程式跑完再擺
+  queueMicrotask(placeAR);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -151,8 +153,8 @@ export function goStage(next: Stage) {
   stage = next;
   pending = next === 'standby' ? null : next;
   if (next === 'console') refreshDaily();
-  chatDock?.show(next !== 'standby');
   setStateLabel();
+  placeAR();
 }
 
 /** 往前 / 往後一段 */
@@ -207,7 +209,6 @@ chatDock = new ChatDock({
 });
 
 chatDock.place(hexConsole.chatRect);
-chatDock.show(stage !== 'standby');
 
 // 天氣：進主控台時更新，之後每 15 分鐘（agent 那邊也有 15 分鐘快取）
 async function refreshWeather() {
@@ -284,16 +285,12 @@ function gainMap(x: number, y: number) {
 // ---- AR 鏡頭背景 ----
 const bgVideo = $('bg') as HTMLVideoElement;
 let arOn = false;
-const arLive = () => document.body.classList.contains('ar-live') && bgVideo.videoWidth > 0;
-
-/** AR 模式：游標對準背景畫面裡的手（背景是 object-fit: cover，要扣掉被裁掉的部分） */
-function arMap(x: number, y: number) {
-  const vw = bgVideo.videoWidth;
-  const vh = bgVideo.videoHeight;
-  const s = Math.max(W / vw, H / vh);
-  const dw = vw * s;
-  const dh = vh * s;
-  return { x: (W - dw) / 2 + x * dw, y: (H - dh) / 2 + y * dh };
+/** AR 鏡頭是右下角的小視窗：主控台在天氣卡下面；全息模式沒有天氣卡（底下是 Dock），改放右邊中間 */
+function placeAR() {
+  let r = hexConsole.arRect;
+  if (stage === 'holo') r = { ...r, y: Math.max(110, H * 0.3) };
+  const win = document.getElementById('arWin');
+  if (win) Object.assign(win.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
 }
 
 function toggleAR() {
@@ -304,7 +301,6 @@ function toggleAR() {
   if (!arOn) {
     bgVideo.srcObject = null;
     document.body.classList.remove('ar-live');
-    menu.gridScale = 1;
   }
   toast(arOn ? 'AR 鏡頭開啟中…' : 'AR 鏡頭已關閉');
 }
@@ -478,7 +474,6 @@ const link = new DeskLink({
   onStream(stream) {
     bgVideo.srcObject = stream;
     document.body.classList.toggle('ar-live', !!stream);
-    menu.gridScale = stream ? 0.25 : 1;
     if (stream) bgVideo.play().catch(() => {});
   },
   onState(state, detail) {
@@ -499,7 +494,7 @@ const link = new DeskLink({
         fy.reset();
         return;
       }
-      const p = arLive() ? arMap(msg.x, msg.y) : gainMap(msg.x, msg.y);
+      const p = gainMap(msg.x, msg.y);
       cursor = { x: fx.filter(p.x, t), y: fy.filter(p.y, t) };
       cursorFromHand = true;
       handT = t;
@@ -621,6 +616,8 @@ function loop() {
     swords.control(hand, t);
   }
   swords.draw(ctx, t, W, H, menu.coreR);
+  // 對話欄：主控台／全息模式才顯示，萬劍歸宗播放中先藏起來
+  chatDock?.show(stage !== 'standby' && !swords.capturing);
 
   // 聲波：聽你說話時跟著你的音量，HEX 說話時跟著它的聲音
   const vMode: VoiceMode =
