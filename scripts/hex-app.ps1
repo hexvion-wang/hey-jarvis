@@ -82,3 +82,9 @@ while (Get-CimInstance Win32_Process -Filter "Name='chrome.exe' OR Name='msedge.
 
 Log '視窗已關閉，停止服務'
 foreach ($p in $started) { if ($p -and -not $p.HasExited) { taskkill /PID $p.Id /T /F | Out-Null } }
+# 把 AI 模型從顯卡釋放（不然 Ollama 會留著 5GB 多的顯示記憶體 30 分鐘，影響看影片、玩遊戲）
+try {
+  Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:11434/api/generate' -ContentType 'application/json' `
+    -Body '{"model":"qwen3:8b","keep_alive":0}' -TimeoutSec 10 | Out-Null
+  Log 'AI 模型已從顯卡釋放'
+} catch { Log "釋放 AI 模型失敗：$($_.Exception.Message)" }
