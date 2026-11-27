@@ -11,8 +11,9 @@ export const APP_NAMES: Record<string, { name: string; alias: string[] }> = {
   powerpoint: { name: 'PowerPoint', alias: ['powerpoint', 'ppt', '簡報'] },
   discord: { name: 'Discord', alias: ['discord', 'dc'] },
   steam: { name: 'Steam', alias: ['steam'] },
-  lol: { name: '英雄聯盟', alias: ['英雄聯盟', 'lol', '聯盟', 'league of legends'] },
-  wuwa: { name: '鳴潮', alias: ['鳴潮', 'wuwa', 'wuthering'] },
+  lol: { name: '英雄聯盟', alias: ['英雄聯盟', '英雄連盟', 'lol', '聯盟', 'league of legends'] },
+  // 語音辨識常把「鳴潮」聽成同音的「明朝」等，一起列進來
+  wuwa: { name: '鳴潮', alias: ['鳴潮', '明朝', '明潮', '鳴朝', '名潮', '銘潮', '冥潮', 'wuwa', 'wuthering'] },
   explorer: { name: '檔案總管', alias: ['檔案總管', '檔案管理', '資料夾', 'explorer'] },
   terminal: { name: '終端機', alias: ['終端機', '終端', 'terminal', '命令列', 'cmd', 'powershell'] },
 };
@@ -49,7 +50,8 @@ export function appPrompt(known: string[]) {
   return (
     `\n\n你可以幫使用者在電腦上開啟程式，可開的程式：${list}。` +
     '只有在使用者明確要你打開／啟動某個程式時，才在回答最後另起一行寫 [[OPEN:程式id]]（可以多個），並用一句話說你已經幫他打開；' +
-    '使用者只是聊到、詢問或說不要開時，不要寫這個標記。清單外的程式請說目前還不能開。'
+    '使用者只是聊到、詢問或說不要開時，不要寫這個標記。清單外的程式請說目前還不能開。' +
+    '使用者常用語音輸入，程式名稱可能被聽成同音字（例如「明朝」其實是「鳴潮」），請依發音判斷是哪個程式。'
   );
 }
 
